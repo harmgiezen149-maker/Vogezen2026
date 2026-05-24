@@ -1,12 +1,13 @@
 # Vogezen 2026 — Familie Planner
 
-Een gedeelde vakantieplanner voor de Vogezen-vakantie van 25 juli tot 7 augustus 2026 bij Domaine des Messires. Het hele gezin kan via dezelfde URL activiteiten per dag inplannen, eigen ideeën toevoegen, en alle wijzigingen worden direct op de server bewaard.
+Een gedeelde vakantieplanner voor de zomer 2026: eerst twee weken bij Domaine des Messires in de Vogezen, daarna een week in Clervaux (Luxemburg). 25 juli — 15 augustus. Het hele gezin kan via dezelfde URL activiteiten per dag inplannen, eigen ideeën toevoegen, en alle wijzigingen worden direct op de server bewaard.
 
 Gebouwd met **Next.js 15** + **Upstash Redis** voor Vercel deployment.
 
 ## Belangrijkste features
 
-- 📅 14 dagen vakantie als ingedeelde blokken (25 juli — 7 augustus)
+- 📅 22 dagen vakantie als ingedeelde blokken (25 juli — 15 augustus)
+- 🏕️ Twee verblijven gemarkeerd: Domaine des Messires (Vogezen) + Clervaux (Luxemburg)
 - 🎯 ~55 vooringevulde activiteiten in 8 categorieën
 - ✨ Voorgesteld schema staat erin als startpunt
 - 👨‍👩‍👧‍👦 Server-side opslag: iedereen ziet dezelfde planning
