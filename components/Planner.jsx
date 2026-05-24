@@ -6,7 +6,7 @@ import {
   ChevronRight, RefreshCw, User, Wifi, WifiOff, Check, AlertCircle, Lock,
 } from 'lucide-react';
 import {
-  COLORS, CATEGORIES, DEFAULT_ACTIVITIES, DAYS, SUGGESTED_PLAN,
+  COLORS, CATEGORIES, DEFAULT_ACTIVITIES, DAYS, SUGGESTED_PLAN, STAYS,
 } from '@/lib/data';
 
 // ============ API CLIENT ============
@@ -213,14 +213,14 @@ const Header = ({ stats, name, onNameChange, syncStatus, lastUpdate, onRefresh }
         fontSize: 36, lineHeight: 1.05, margin: 0,
         color: COLORS.forest, fontWeight: 500, letterSpacing: '-0.02em',
       }}>
-        Vogezen<br />
+        Vogezen, Elzas<br />
         <span style={{ fontStyle: 'italic', fontWeight: 400, color: COLORS.lake }}>
-          & de Elzas
+          & Clervaux
         </span>
       </h1>
 
       <p style={{ margin: '10px 0 0', color: COLORS.ink, fontSize: 13, lineHeight: 1.5 }}>
-        Domaine des Messires · 25 juli — 7 augustus
+        Messires & Clervaux · 25 juli — 15 augustus
       </p>
 
       <div style={{ display: 'flex', gap: 14, marginTop: 14, fontSize: 13, alignItems: 'flex-end' }}>
@@ -235,7 +235,7 @@ const Header = ({ stats, name, onNameChange, syncStatus, lastUpdate, onRefresh }
         <div style={{ width: 1, background: COLORS.hairline, alignSelf: 'stretch' }} />
         <div>
           <div style={{ fontFamily: "'Fraunces', serif", fontSize: 22, color: COLORS.forest, fontWeight: 500 }}>
-            {stats.daysWithActivities}<span style={{ color: COLORS.inkLight, fontSize: 14 }}>/14</span>
+            {stats.daysWithActivities}<span style={{ color: COLORS.inkLight, fontSize: 14 }}>/{DAYS.length}</span>
           </div>
           <div style={{ color: COLORS.inkLight, fontSize: 10, letterSpacing: 0.5, textTransform: 'uppercase' }}>
             Dagen vol
@@ -398,11 +398,13 @@ const ActivityChip = ({ activity, onRemove }) => {
 
 const DayCard = ({ day, activities, activityById, onAddClick, onRemove }) => {
   const hasActivities = activities.length > 0;
+  const stay = STAYS[day.stay];
   return (
     <div style={{
       background: hasActivities ? COLORS.creamSoft : 'rgba(250, 243, 225, 0.4)',
       borderRadius: 16, padding: 16,
       border: `1px solid ${COLORS.hairline}`,
+      borderLeft: `4px solid ${stay?.color || COLORS.hairline}`,
       transition: 'all 0.2s ease',
     }}>
       <div style={{
@@ -418,6 +420,15 @@ const DayCard = ({ day, activities, activityById, onAddClick, onRemove }) => {
           fontFamily: "'Fraunces', serif", fontSize: 22,
           color: COLORS.forest, fontWeight: 500, letterSpacing: '-0.01em',
         }}>{day.date}</div>
+        {stay && (
+          <div style={{
+            fontSize: 9, color: stay.color, letterSpacing: 0.8,
+            textTransform: 'uppercase', fontWeight: 600,
+            padding: '2px 7px',
+            background: `${stay.color}1A`,
+            borderRadius: 99,
+          }}>{stay.name}</div>
+        )}
         {day.label && (
           <div style={{
             fontSize: 10, color: COLORS.lake, letterSpacing: 0.8,
