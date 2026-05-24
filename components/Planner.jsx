@@ -3,10 +3,10 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   Plus, X, Trash2, RotateCcw, Sparkles, Calendar as CalendarIcon,
-  ChevronRight, RefreshCw, User, Wifi, WifiOff, Check, AlertCircle, Lock,
+  ChevronRight, RefreshCw, User, Wifi, WifiOff, Check, AlertCircle, Lock, MapPin,
 } from 'lucide-react';
 import {
-  COLORS, CATEGORIES, DEFAULT_ACTIVITIES, DAYS, SUGGESTED_PLAN, STAYS,
+  COLORS, CATEGORIES, DEFAULT_ACTIVITIES, DAYS, SUGGESTED_PLAN, STAYS, getMapsLink,
 } from '@/lib/data';
 
 // ============ API CLIENT ============
@@ -362,6 +362,7 @@ const TabBar = ({ active, setActive }) => (
 
 const ActivityChip = ({ activity, onRemove }) => {
   const cat = CATEGORIES[activity.category] || CATEGORIES.custom;
+  const mapsLink = getMapsLink(activity);
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 10,
@@ -379,6 +380,22 @@ const ActivityChip = ({ activity, onRemove }) => {
           <div style={{ fontSize: 11, color: COLORS.inkLight, marginTop: 2 }}>{activity.note}</div>
         )}
       </div>
+      {mapsLink && (
+        <a
+          href={mapsLink}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            color: cat.color, padding: 4, borderRadius: 6,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            textDecoration: 'none',
+          }}
+          aria-label="Open in Google Maps"
+          title="Open in Google Maps"
+        >
+          <MapPin size={15} />
+        </a>
+      )}
       <button
         onClick={onRemove}
         style={{
@@ -495,6 +512,7 @@ const PlanView = ({ plan, activityById, onAddClick, onRemove }) => (
 
 const LibraryActivity = ({ activity, usedInDays, onAddClick, onDelete }) => {
   const cat = CATEGORIES[activity.category] || CATEGORIES.custom;
+  const mapsLink = getMapsLink(activity);
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
@@ -516,6 +534,22 @@ const LibraryActivity = ({ activity, usedInDays, onAddClick, onDelete }) => {
           </div>
         )}
       </div>
+      {mapsLink && (
+        <a
+          href={mapsLink}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            color: cat.color, padding: 6, borderRadius: 6,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            textDecoration: 'none',
+          }}
+          aria-label="Open in Google Maps"
+          title="Open in Google Maps"
+        >
+          <MapPin size={16} />
+        </a>
+      )}
       {activity.category === 'custom' && (
         <button
           onClick={onDelete}
