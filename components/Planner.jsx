@@ -646,7 +646,7 @@ const LibraryView = ({ activities, plan, onAddClick, onCreateCustom, onDeleteCus
     return out;
   }, [activities]);
 
-  const orderedCats = ['camping', 'hiking', 'cycling', 'alsace', 'colmar', 'cities', 'nature', 'food', 'luxembourg', 'custom'];
+  const orderedCats = ['camping', 'hiking', 'cycling', 'alsace', 'colmar', 'cities', 'nature', 'food', 'luxembourg', 'shops', 'custom'];
 
   return (
     <div style={{ padding: '16px 20px 100px' }}>
@@ -763,7 +763,7 @@ const PickActivitySheet = ({ activities, plan, dayKey, onPick, onClose, onCreate
     return out;
   }, [activities]);
 
-  const orderedCats = ['camping', 'hiking', 'cycling', 'alsace', 'colmar', 'cities', 'nature', 'food', 'custom'];
+  const orderedCats = ['camping', 'hiking', 'cycling', 'alsace', 'colmar', 'cities', 'nature', 'food', 'luxembourg', 'shops', 'custom'];
 
   return (
     <Sheet onClose={onClose} title={`Voeg toe aan ${day?.dayShort} ${day?.date}`}>
