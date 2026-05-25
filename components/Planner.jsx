@@ -5,9 +5,10 @@ import Link from 'next/link';
 import {
   Plus, X, Trash2, RotateCcw, Sparkles, Calendar as CalendarIcon,
   ChevronRight, RefreshCw, User, Wifi, WifiOff, Check, AlertCircle, Lock, MapPin, Map as MapIcon,
+  Pencil, Search, Loader2,
 } from 'lucide-react';
 import {
-  COLORS, CATEGORIES, DEFAULT_ACTIVITIES, DAYS, SUGGESTED_PLAN, STAYS, getMapsLink,
+  COLORS, CATEGORIES, DEFAULT_ACTIVITIES, DAYS, SUGGESTED_PLAN, STAYS, getMapsLink, applyLocationOverride,
 } from '@/lib/data';
 
 // ============ API CLIENT ============
@@ -39,16 +40,24 @@ async function apiGet() {
   return res.json();
 }
 
-async function apiPut(plan, customActivities, name) {
+async function apiPut(plan, customActivities, locationOverrides, name) {
   const res = await fetch('/api/plan', {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
       'X-Family-Pin': getPin(),
     },
-    body: JSON.stringify({ plan, customActivities, updatedBy: name || null }),
+    body: JSON.stringify({ plan, customActivities, locationOverrides, updatedBy: name || null }),
   });
   if (!res.ok) throw new Error(res.status === 401 ? 'unauthorized' : `HTTP ${res.status}`);
+  return res.json();
+}
+
+async function apiGeocode(q) {
+  const res = await fetch(`/api/geocode?q=${encodeURIComponent(q)}`, {
+    headers: { 'X-Family-Pin': getPin() },
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
 
@@ -377,12 +386,12 @@ const TabBar = ({ active, setActive }) => (
 
 // ============ ACTIVITY CHIP ============
 
-const ActivityChip = ({ activity, onRemove }) => {
+const ActivityChip = ({ activity, onRemove, onEditLocation }) => {
   const cat = CATEGORIES[activity.category] || CATEGORIES.custom;
   const mapsLink = getMapsLink(activity);
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: 10,
+      display: 'flex', alignItems: 'center', gap: 8,
       background: COLORS.creamSoft, borderRadius: 10, padding: '10px 12px',
       borderLeft: `3px solid ${cat.color}`,
       boxShadow: '0 1px 2px rgba(31,41,34,0.04)',
@@ -397,6 +406,20 @@ const ActivityChip = ({ activity, onRemove }) => {
           <div style={{ fontSize: 11, color: COLORS.inkLight, marginTop: 2 }}>{activity.note}</div>
         )}
       </div>
+      <button
+        onClick={() => onEditLocation(activity)}
+        style={{
+          border: 'none', background: 'transparent', cursor: 'pointer',
+          color: activity.coords ? cat.color : COLORS.inkLight,
+          padding: 4, borderRadius: 6,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          opacity: activity.coords ? 1 : 0.55,
+        }}
+        aria-label={activity.coords ? 'Locatie bewerken' : 'Locatie toevoegen'}
+        title={activity.coords ? 'Locatie bewerken' : 'Locatie toevoegen'}
+      >
+        <Pencil size={13} />
+      </button>
       {mapsLink && (
         <a
           href={mapsLink}
@@ -430,7 +453,7 @@ const ActivityChip = ({ activity, onRemove }) => {
 
 // ============ DAY CARD ============
 
-const DayCard = ({ day, activities, activityById, onAddClick, onRemove }) => {
+const DayCard = ({ day, activities, activityById, onAddClick, onRemove, onEditLocation }) => {
   const hasActivities = activities.length > 0;
   const stay = STAYS[day.stay];
   return (
@@ -483,6 +506,7 @@ const DayCard = ({ day, activities, activityById, onAddClick, onRemove }) => {
                 key={`${actId}-${idx}`}
                 activity={activity}
                 onRemove={() => onRemove(day.key, idx)}
+                onEditLocation={onEditLocation}
               />
             );
           })}
@@ -510,7 +534,7 @@ const DayCard = ({ day, activities, activityById, onAddClick, onRemove }) => {
 
 // ============ PLAN VIEW ============
 
-const PlanView = ({ plan, activityById, onAddClick, onRemove }) => (
+const PlanView = ({ plan, activityById, onAddClick, onRemove, onEditLocation }) => (
   <div style={{ padding: '16px 20px 100px', display: 'flex', flexDirection: 'column', gap: 12 }}>
     {DAYS.map(day => (
       <DayCard
@@ -520,6 +544,7 @@ const PlanView = ({ plan, activityById, onAddClick, onRemove }) => (
         activityById={activityById}
         onAddClick={onAddClick}
         onRemove={onRemove}
+        onEditLocation={onEditLocation}
       />
     ))}
   </div>
@@ -527,12 +552,12 @@ const PlanView = ({ plan, activityById, onAddClick, onRemove }) => (
 
 // ============ LIBRARY VIEW ============
 
-const LibraryActivity = ({ activity, usedInDays, onAddClick, onDelete }) => {
+const LibraryActivity = ({ activity, usedInDays, onAddClick, onDelete, onEditLocation }) => {
   const cat = CATEGORIES[activity.category] || CATEGORIES.custom;
   const mapsLink = getMapsLink(activity);
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
+      display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px',
       background: COLORS.creamSoft, borderRadius: 12,
       borderLeft: `3px solid ${cat.color}`,
     }}>
@@ -551,6 +576,20 @@ const LibraryActivity = ({ activity, usedInDays, onAddClick, onDelete }) => {
           </div>
         )}
       </div>
+      <button
+        onClick={() => onEditLocation(activity)}
+        style={{
+          border: 'none', background: 'transparent', cursor: 'pointer',
+          color: activity.coords ? cat.color : COLORS.inkLight,
+          padding: 6, borderRadius: 6,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          opacity: activity.coords ? 1 : 0.55,
+        }}
+        aria-label={activity.coords ? 'Locatie bewerken' : 'Locatie toevoegen'}
+        title={activity.coords ? 'Locatie bewerken' : 'Locatie toevoegen'}
+      >
+        <Pencil size={14} />
+      </button>
       {mapsLink && (
         <a
           href={mapsLink}
@@ -591,7 +630,7 @@ const LibraryActivity = ({ activity, usedInDays, onAddClick, onDelete }) => {
   );
 };
 
-const LibraryView = ({ activities, plan, onAddClick, onCreateCustom, onDeleteCustom }) => {
+const LibraryView = ({ activities, plan, onAddClick, onCreateCustom, onDeleteCustom, onEditLocation }) => {
   const planUsage = useMemo(() => {
     const usage = {};
     Object.values(plan).flat().forEach(id => { usage[id] = (usage[id] || 0) + 1; });
@@ -607,7 +646,7 @@ const LibraryView = ({ activities, plan, onAddClick, onCreateCustom, onDeleteCus
     return out;
   }, [activities]);
 
-  const orderedCats = ['camping', 'hiking', 'cycling', 'alsace', 'colmar', 'cities', 'nature', 'food', 'custom'];
+  const orderedCats = ['camping', 'hiking', 'cycling', 'alsace', 'colmar', 'cities', 'nature', 'food', 'luxembourg', 'custom'];
 
   return (
     <div style={{ padding: '16px 20px 100px' }}>
@@ -649,6 +688,7 @@ const LibraryView = ({ activities, plan, onAddClick, onCreateCustom, onDeleteCus
                   usedInDays={planUsage[a.id] || 0}
                   onAddClick={() => onAddClick(a.id)}
                   onDelete={() => onDeleteCustom(a.id)}
+                  onEditLocation={onEditLocation}
                 />
               ))}
             </div>
@@ -841,15 +881,186 @@ const PickDaySheet = ({ activity, plan, onPick, onClose }) => (
   </Sheet>
 );
 
+// ============ LOCATION PICKER ============
+// Herbruikbaar veld met OpenStreetMap autocomplete
+
+const LocationPicker = ({ value, onChange, accentColor = COLORS.forest }) => {
+  // value shape: { label, coords: [lat,lng] } | null
+  const [query, setQuery] = useState(value?.label || '');
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [showResults, setShowResults] = useState(false);
+  const [pickedCoords, setPickedCoords] = useState(value?.coords || null);
+  const searchTimer = useRef(null);
+
+  useEffect(() => {
+    setQuery(value?.label || '');
+    setPickedCoords(value?.coords || null);
+  }, [value?.label, value?.coords?.[0], value?.coords?.[1]]);
+
+  const doSearch = useCallback(async (q) => {
+    if (!q || q.length < 2) {
+      setResults([]); setLoading(false); return;
+    }
+    setLoading(true);
+    try {
+      const data = await apiGeocode(q);
+      setResults(data.results || []);
+    } catch (e) {
+      setResults([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const onChangeText = (txt) => {
+    setQuery(txt);
+    setShowResults(true);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    // Als gebruiker tekst aanpast, coords zijn niet meer geldig tenzij ze opnieuw kiezen
+    if (pickedCoords && txt !== value?.label) setPickedCoords(null);
+    searchTimer.current = setTimeout(() => doSearch(txt), 400);
+  };
+
+  const onPick = (r) => {
+    const coords = [r.lat, r.lng];
+    setQuery(r.shortName);
+    setPickedCoords(coords);
+    setShowResults(false);
+    setResults([]);
+    onChange({ label: r.shortName, coords, fullName: r.name });
+  };
+
+  const onClear = () => {
+    setQuery(''); setPickedCoords(null); setResults([]); setShowResults(false);
+    onChange(null);
+  };
+
+  const inputStyle = {
+    width: '100%', padding: '12px 40px 12px 38px',
+    background: COLORS.creamSoft,
+    border: `1px solid ${pickedCoords ? accentColor : COLORS.hairline}`,
+    borderRadius: 10,
+    fontFamily: "'DM Sans', sans-serif", fontSize: 14,
+    color: COLORS.charcoal, outline: 'none', boxSizing: 'border-box',
+  };
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <div style={{ position: 'relative' }}>
+        <Search
+          size={15}
+          style={{
+            position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)',
+            color: COLORS.inkLight, pointerEvents: 'none',
+          }}
+        />
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => onChangeText(e.target.value)}
+          onFocus={() => setShowResults(true)}
+          placeholder="Bv. 'Riquewihr' of 'Lac de Pierre-Percée'"
+          style={inputStyle}
+        />
+        {loading && (
+          <Loader2
+            size={15}
+            style={{
+              position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+              color: COLORS.inkLight,
+              animation: 'spin 1s linear infinite',
+            }}
+          />
+        )}
+        {!loading && query && (
+          <button
+            onClick={onClear}
+            type="button"
+            style={{
+              position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+              border: 'none', background: 'transparent', cursor: 'pointer',
+              color: COLORS.inkLight, padding: 4,
+              display: 'flex', alignItems: 'center',
+            }}
+            aria-label="Wis"
+          ><X size={14} /></button>
+        )}
+      </div>
+
+      {pickedCoords && !showResults && (
+        <div style={{
+          marginTop: 6, fontSize: 11,
+          color: accentColor, display: 'flex', alignItems: 'center', gap: 4,
+        }}>
+          <MapPin size={11} /> Locatie ingesteld
+        </div>
+      )}
+
+      {showResults && results.length > 0 && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0,
+          marginTop: 4, zIndex: 60,
+          background: COLORS.cream,
+          border: `1px solid ${COLORS.hairline}`,
+          borderRadius: 10,
+          boxShadow: '0 6px 16px rgba(31,41,34,0.12)',
+          maxHeight: 240, overflowY: 'auto',
+        }}>
+          {results.map((r, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => onPick(r)}
+              style={{
+                display: 'block', width: '100%', textAlign: 'left',
+                padding: '10px 12px',
+                background: 'transparent', border: 'none',
+                borderBottom: i < results.length - 1 ? `1px solid ${COLORS.hairline}` : 'none',
+                cursor: 'pointer',
+                fontFamily: "'DM Sans', sans-serif",
+              }}
+            >
+              <div style={{ fontSize: 13, color: COLORS.charcoal, fontWeight: 500 }}>
+                {r.shortName}
+              </div>
+              <div style={{
+                fontSize: 11, color: COLORS.inkLight, marginTop: 2,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {r.name}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const CustomActivityForm = ({ onSave, onClose }) => {
   const [name, setName] = useState('');
   const [note, setNote] = useState('');
   const [emoji, setEmoji] = useState('✨');
   const [category, setCategory] = useState('custom');
+  const [location, setLocation] = useState(null);
+  // location shape: { label, coords: [lat,lng], fullName } | null
 
   const handleSave = () => {
     if (!name.trim()) return;
-    onSave({ name: name.trim(), note: note.trim(), emoji: emoji.trim() || '✨', category });
+    const data = {
+      name: name.trim(),
+      note: note.trim(),
+      emoji: emoji.trim() || '✨',
+      category,
+    };
+    if (location?.coords) {
+      data.coords = location.coords;
+      data.locationLabel = location.label;
+      // Voor Google Maps link
+      data.mapsQuery = location.fullName || location.label;
+    }
+    onSave(data);
   };
 
   const inputStyle = {
@@ -903,6 +1114,15 @@ const CustomActivityForm = ({ onSave, onClose }) => {
           />
         </div>
 
+        <div>
+          <label style={{ fontSize: 11, color: COLORS.inkLight, letterSpacing: 0.5, textTransform: 'uppercase', fontWeight: 600 }}>
+            Locatie (optioneel)
+          </label>
+          <div style={{ marginTop: 6 }}>
+            <LocationPicker value={location} onChange={setLocation} />
+          </div>
+        </div>
+
         <button
           onClick={handleSave} disabled={!name.trim()}
           style={{
@@ -917,6 +1137,94 @@ const CustomActivityForm = ({ onSave, onClose }) => {
         >
           Opslaan
         </button>
+      </div>
+    </Sheet>
+  );
+};
+
+// ============ LOCATION EDIT SHEET (voor bestaande activiteit) ============
+
+const LocationEditSheet = ({ activity, currentOverride, onSave, onClear, onClose }) => {
+  const initial = useMemo(() => {
+    if (activity?.coords) {
+      return {
+        label: activity.locationLabel || activity.mapsQuery || activity.name,
+        coords: activity.coords,
+      };
+    }
+    return null;
+  }, [activity]);
+
+  const [location, setLocation] = useState(initial);
+  const hasOverride = Boolean(currentOverride && Object.keys(currentOverride).length > 0);
+
+  const handleSave = () => {
+    if (location?.coords) {
+      onSave({
+        coords: location.coords,
+        locationLabel: location.label,
+        mapsQuery: location.fullName || location.label,
+        mapsPlaceId: null, // wis oude place ID, want override gebruikt eigen zoekquery
+      });
+    } else {
+      onSave({ coords: null, locationLabel: null, mapsQuery: null, mapsPlaceId: null });
+    }
+  };
+
+  if (!activity) return null;
+
+  return (
+    <Sheet onClose={onClose} title="Locatie wijzigen">
+      <div style={{ padding: '8px 20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '10px 12px',
+          background: COLORS.creamSoft,
+          borderRadius: 10,
+        }}>
+          <span style={{ fontSize: 22 }}>{activity.emoji}</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 500, color: COLORS.charcoal }}>{activity.name}</div>
+            {activity.note && (
+              <div style={{ fontSize: 11, color: COLORS.inkLight, marginTop: 2 }}>{activity.note}</div>
+            )}
+          </div>
+        </div>
+
+        <div>
+          <label style={{ fontSize: 11, color: COLORS.inkLight, letterSpacing: 0.5, textTransform: 'uppercase', fontWeight: 600 }}>
+            Locatie
+          </label>
+          <div style={{ marginTop: 6 }}>
+            <LocationPicker value={location} onChange={setLocation} />
+          </div>
+          <div style={{ fontSize: 11, color: COLORS.inkLight, marginTop: 6, lineHeight: 1.4 }}>
+            Wijzigt waar deze activiteit op de kaart verschijnt en wat de "Open in Google Maps" knop opent. Geldt voor het hele gezin.
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 10 }}>
+          {hasOverride && (
+            <button
+              onClick={onClear}
+              style={{
+                flex: 1, padding: 12, background: 'transparent',
+                color: COLORS.wine, border: `1px solid ${COLORS.wine}40`,
+                borderRadius: 10, fontFamily: "'DM Sans', sans-serif",
+                fontSize: 13, fontWeight: 500, cursor: 'pointer',
+              }}
+            >Standaard herstellen</button>
+          )}
+          <button
+            onClick={handleSave}
+            style={{
+              flex: 1, padding: 12, background: COLORS.forest,
+              color: COLORS.cream, border: 'none', borderRadius: 10,
+              fontFamily: "'DM Sans', sans-serif",
+              fontSize: 14, fontWeight: 600, cursor: 'pointer',
+            }}
+          >Opslaan</button>
+        </div>
       </div>
     </Sheet>
   );
@@ -1005,6 +1313,7 @@ export default function Planner({ authRequired }) {
   const [activeTab, setActiveTab] = useState('plan');
   const [plan, setPlan] = useState({});
   const [customActivities, setCustomActivities] = useState([]);
+  const [locationOverrides, setLocationOverrides] = useState({});
   const [loading, setLoading] = useState(true);
   const [sheet, setSheet] = useState(null);
   const [syncStatus, setSyncStatus] = useState('idle'); // 'idle' | 'syncing' | 'synced' | 'offline'
@@ -1030,6 +1339,7 @@ export default function Planner({ authRequired }) {
       skipNextSave.current = true;
       setPlan(data.plan || {});
       setCustomActivities(data.customActivities || []);
+      setLocationOverrides(data.locationOverrides || {});
       setServerUpdate({ at: data.updatedAt, by: data.updatedBy });
       setSyncStatus('synced');
       setTimeout(() => setSyncStatus('idle'), 1500);
@@ -1067,7 +1377,7 @@ export default function Planner({ authRequired }) {
     setSyncStatus('syncing');
     saveTimer.current = setTimeout(async () => {
       try {
-        const data = await apiPut(plan, customActivities, name);
+        const data = await apiPut(plan, customActivities, locationOverrides, name);
         setServerUpdate({ at: data.updatedAt, by: data.updatedBy });
         setSyncStatus('synced');
         setTimeout(() => setSyncStatus('idle'), 1500);
@@ -1076,17 +1386,21 @@ export default function Planner({ authRequired }) {
       }
     }, 500);
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
-  }, [plan, customActivities, name, unlocked, loading]);
+  }, [plan, customActivities, locationOverrides, name, unlocked, loading]);
 
   const allActivities = useMemo(
     () => [...DEFAULT_ACTIVITIES, ...customActivities],
     [customActivities]
   );
 
-  const activityById = useMemo(
-    () => Object.fromEntries(allActivities.map(a => [a.id, a])),
-    [allActivities]
-  );
+  // activityById past locationOverrides toe
+  const activityById = useMemo(() => {
+    const obj = {};
+    allActivities.forEach(a => {
+      obj[a.id] = applyLocationOverride(a, locationOverrides);
+    });
+    return obj;
+  }, [allActivities, locationOverrides]);
 
   const stats = useMemo(() => {
     const totalActivities = Object.values(plan).flat().length;
@@ -1104,12 +1418,48 @@ export default function Planner({ authRequired }) {
 
   const createCustom = (data, andAddToDay) => {
     const newId = `custom_${Date.now()}`;
+    // Splits locatie-velden af; die staan ook al in data zelf zodat ze direct werken
     const newAct = { ...data, id: newId };
     setCustomActivities(c => [...c, newAct]);
     if (andAddToDay) {
       setPlan(p => ({ ...p, [andAddToDay]: [...(p[andAddToDay] || []), newId] }));
     }
     return newId;
+  };
+
+  const saveLocationOverride = (activityId, override) => {
+    setLocationOverrides(o => {
+      // Voor custom activities: wijzig direct in customActivities array
+      const isCustom = customActivities.some(a => a.id === activityId);
+      if (isCustom) {
+        setCustomActivities(arr => arr.map(a => {
+          if (a.id !== activityId) return a;
+          const merged = { ...a };
+          if (override.coords !== undefined) merged.coords = override.coords;
+          if (override.mapsQuery !== undefined) merged.mapsQuery = override.mapsQuery;
+          if (override.mapsPlaceId !== undefined) merged.mapsPlaceId = override.mapsPlaceId;
+          if (override.locationLabel !== undefined) merged.locationLabel = override.locationLabel;
+          // Wis null-velden
+          if (merged.coords === null) delete merged.coords;
+          if (merged.mapsQuery === null) delete merged.mapsQuery;
+          if (merged.mapsPlaceId === null) delete merged.mapsPlaceId;
+          if (merged.locationLabel === null) delete merged.locationLabel;
+          return merged;
+        }));
+        // Geen apart override-record voor custom
+        const { [activityId]: _, ...rest } = o;
+        return rest;
+      }
+      // Voor built-in activities: gebruik override-record
+      return { ...o, [activityId]: override };
+    });
+  };
+
+  const clearLocationOverride = (activityId) => {
+    setLocationOverrides(o => {
+      const { [activityId]: _, ...rest } = o;
+      return rest;
+    });
   };
 
   const deleteCustom = (id) => {
@@ -1180,14 +1530,16 @@ export default function Planner({ authRequired }) {
             activityById={activityById}
             onAddClick={(dayKey) => setSheet({ type: 'pick-activity', dayKey })}
             onRemove={removeFromDay}
+            onEditLocation={(act) => setSheet({ type: 'edit-location', activityId: act.id })}
           />
         ) : (
           <LibraryView
-            activities={allActivities}
+            activities={allActivities.map(a => applyLocationOverride(a, locationOverrides))}
             plan={plan}
             onAddClick={(activityId) => setSheet({ type: 'pick-day', activityId })}
             onCreateCustom={() => setSheet({ type: 'create-custom' })}
             onDeleteCustom={deleteCustom}
+            onEditLocation={(act) => setSheet({ type: 'edit-location', activityId: act.id })}
           />
         )}
 
@@ -1269,6 +1621,22 @@ export default function Planner({ authRequired }) {
           message={sheet.message}
           confirmText={sheet.confirmText}
           onConfirm={sheet.onConfirm}
+          onClose={() => setSheet(null)}
+        />
+      )}
+
+      {sheet?.type === 'edit-location' && (
+        <LocationEditSheet
+          activity={activityById[sheet.activityId]}
+          currentOverride={locationOverrides[sheet.activityId]}
+          onSave={(override) => {
+            saveLocationOverride(sheet.activityId, override);
+            setSheet(null);
+          }}
+          onClear={() => {
+            clearLocationOverride(sheet.activityId);
+            setSheet(null);
+          }}
           onClose={() => setSheet(null)}
         />
       )}

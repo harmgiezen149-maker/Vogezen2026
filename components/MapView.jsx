@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { ArrowLeft, Filter, X, ExternalLink } from 'lucide-react';
 import {
   COLORS, CATEGORIES, DEFAULT_ACTIVITIES, DAYS, SUGGESTED_PLAN,
-  MESSIRES_COORDS, CLERVAUX_COORDS, getMapsLink,
+  MESSIRES_COORDS, CLERVAUX_COORDS, getMapsLink, applyLocationOverride,
 } from '@/lib/data';
 
 // ============ API CLIENT (read-only) ============
@@ -202,6 +202,7 @@ const Legend = ({ visibleCategories }) => {
 export default function MapView({ authRequired }) {
   const [plan, setPlan] = useState(null);
   const [customActivities, setCustomActivities] = useState([]);
+  const [locationOverrides, setLocationOverrides] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState('all');
@@ -218,6 +219,7 @@ export default function MapView({ authRequired }) {
         const data = await fetchPlan();
         setPlan(data.plan || {});
         setCustomActivities(data.customActivities || []);
+        setLocationOverrides(data.locationOverrides || {});
       } catch (e) {
         if (e.message === 'unauthorized') {
           setError('Geen toegang — open eerst de planner om de PIN in te voeren.');
@@ -269,15 +271,18 @@ export default function MapView({ authRequired }) {
     };
   }, [loading, error]);
 
-  // Activities lookup
+  // Activities lookup met overrides
   const allActivities = useMemo(
     () => [...DEFAULT_ACTIVITIES, ...customActivities],
     [customActivities]
   );
-  const activityById = useMemo(
-    () => Object.fromEntries(allActivities.map(a => [a.id, a])),
-    [allActivities]
-  );
+  const activityById = useMemo(() => {
+    const obj = {};
+    allActivities.forEach(a => {
+      obj[a.id] = applyLocationOverride(a, locationOverrides);
+    });
+    return obj;
+  }, [allActivities, locationOverrides]);
 
   // Build marker data: { activity, days: ['2026-07-25', ...] }
   const markerData = useMemo(() => {
