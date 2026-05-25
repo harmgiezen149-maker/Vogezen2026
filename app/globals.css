@@ -25,6 +25,11 @@ body {
   to { transform: translateY(0); }
 }
 
+@keyframes spin {
+  from { transform: translateY(-50%) rotate(0); }
+  to { transform: translateY(-50%) rotate(360deg); }
+}
+
 button:active {
   transform: scale(0.98);
 }
