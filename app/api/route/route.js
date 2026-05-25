@@ -2,9 +2,10 @@ import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
-// Simpele in-memory cache per server instance (4 uur)
+// In-memory cache per server instance (24 uur).
+// Routes veranderen niet, dus we cachen agressief.
 const cache = new Map();
-const CACHE_TTL = 4 * 60 * 60 * 1000;
+const CACHE_TTL = 24 * 60 * 60 * 1000;
 
 function cacheGet(key) {
   const entry = cache.get(key);
@@ -17,14 +18,13 @@ function cacheGet(key) {
 }
 function cacheSet(key, value) {
   cache.set(key, { at: Date.now(), value });
-  // Voorkom onbeperkte groei
-  if (cache.size > 200) {
+  if (cache.size > 500) {
     const firstKey = cache.keys().next().value;
     cache.delete(firstKey);
   }
 }
 
-// Rate limiter (sober): max 30 calls/minuut per IP
+// Rate limiter: max 30 calls/minuut per IP
 const recentRequests = new Map();
 function rateLimitOK(ip) {
   const now = Date.now();
@@ -41,6 +41,13 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Te veel verzoeken' }, { status: 429 });
   }
 
+  const apiKey = process.env.ORS_API_KEY;
+  if (!apiKey) {
+    return NextResponse.json({
+      error: 'ORS_API_KEY niet ingesteld. Maak gratis een key op openrouteservice.org en zet hem in Vercel env vars.',
+    }, { status: 500 });
+  }
+
   try {
     const body = await request.json();
     const points = Array.isArray(body?.points) ? body.points : [];
@@ -48,48 +55,62 @@ export async function POST(request) {
     if (points.length < 2) {
       return NextResponse.json({ segments: [], totalDistance: 0, totalDuration: 0, geometry: null });
     }
-    if (points.length > 20) {
-      return NextResponse.json({ error: 'Te veel punten (max 20)' }, { status: 400 });
+    if (points.length > 50) {
+      return NextResponse.json({ error: 'Te veel punten (max 50)' }, { status: 400 });
     }
 
-    // Cache key op basis van afgeronde coords (5 decimalen = ~1m)
+    // Cache key op afgeronde coords (5 decimalen ≈ 1m)
     const cacheKey = points
       .map(([lat, lng]) => `${lat.toFixed(5)},${lng.toFixed(5)}`)
       .join('|');
     const cached = cacheGet(cacheKey);
     if (cached) return NextResponse.json(cached);
 
-    // OSRM: lon,lat (let op de volgorde!)
-    const coordStr = points
-      .map(([lat, lng]) => `${lng},${lat}`)
-      .join(';');
+    // OpenRouteService verwacht [lng, lat] (let op de volgorde!)
+    const coordinates = points.map(([lat, lng]) => [lng, lat]);
 
-    const url = `https://router.project-osrm.org/route/v1/driving/${coordStr}` +
-      `?overview=full&geometries=geojson&steps=false&annotations=duration,distance`;
-
+    const url = 'https://api.openrouteservice.org/v2/directions/driving-car/geojson';
     const res = await fetch(url, {
-      headers: { 'User-Agent': 'VosgesPlanner/1.0' },
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': apiKey,
+        'Accept': 'application/json, application/geo+json',
+      },
+      body: JSON.stringify({
+        coordinates,
+        instructions: false,
+        geometry_simplify: true,
+      }),
     });
+
     if (!res.ok) {
-      return NextResponse.json({ error: `Routing fout ${res.status}` }, { status: 502 });
+      const text = await res.text().catch(() => '');
+      return NextResponse.json({
+        error: `OpenRouteService fout ${res.status}`,
+        details: text.slice(0, 300),
+      }, { status: 502 });
     }
+
     const data = await res.json();
-    if (data.code !== 'Ok' || !data.routes?.[0]) {
+    const feature = data?.features?.[0];
+    if (!feature) {
       return NextResponse.json({ error: 'Geen route gevonden' }, { status: 404 });
     }
 
-    const route = data.routes[0];
-    // OSRM 'legs': lengte = points.length - 1
-    const segments = (route.legs || []).map((leg) => ({
-      distance: leg.distance, // meters
-      duration: leg.duration, // seconds
+    const summary = feature.properties?.summary || {};
+    const segs = Array.isArray(feature.properties?.segments) ? feature.properties.segments : [];
+
+    const segments = segs.map(s => ({
+      distance: s.distance, // meters
+      duration: s.duration, // seconds
     }));
 
     const result = {
       segments,
-      totalDistance: route.distance, // meters
-      totalDuration: route.duration, // seconds
-      geometry: route.geometry, // GeoJSON LineString
+      totalDistance: summary.distance || 0,
+      totalDuration: summary.duration || 0,
+      geometry: feature.geometry, // GeoJSON LineString
     };
 
     cacheSet(cacheKey, result);
