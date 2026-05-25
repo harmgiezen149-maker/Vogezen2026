@@ -2,17 +2,21 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Filter, X, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Filter, X, ExternalLink, ChevronLeft, ChevronRight, Plus, Eye, EyeOff } from 'lucide-react';
 import {
-  COLORS, CATEGORIES, DEFAULT_ACTIVITIES, DAYS, SUGGESTED_PLAN,
+  COLORS, CATEGORIES, DEFAULT_ACTIVITIES, DAYS, SUGGESTED_PLAN, STAYS,
   MESSIRES_COORDS, CLERVAUX_COORDS, getMapsLink, applyLocationOverride,
 } from '@/lib/data';
 
-// ============ API CLIENT (read-only) ============
+// ============ API CLIENT ============
 
 const getPin = () => {
   if (typeof window === 'undefined') return '';
   return localStorage.getItem('vosges-pin') || '';
+};
+const getName = () => {
+  if (typeof window === 'undefined') return '';
+  return localStorage.getItem('vosges-name') || '';
 };
 
 async function fetchPlan() {
@@ -20,6 +24,24 @@ async function fetchPlan() {
     method: 'GET',
     headers: { 'X-Family-Pin': getPin() },
     cache: 'no-store',
+  });
+  if (!res.ok) throw new Error(res.status === 401 ? 'unauthorized' : `HTTP ${res.status}`);
+  return res.json();
+}
+
+async function savePlan(plan, customActivities, locationOverrides) {
+  const res = await fetch('/api/plan', {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Family-Pin': getPin(),
+    },
+    body: JSON.stringify({
+      plan,
+      customActivities,
+      locationOverrides,
+      updatedBy: getName() || null,
+    }),
   });
   if (!res.ok) throw new Error(res.status === 401 ? 'unauthorized' : `HTTP ${res.status}`);
   return res.json();
@@ -76,6 +98,34 @@ function buildStayIcon(L, color, emoji) {
   });
 }
 
+// Marker voor niet-geplande activiteiten — kleinere, semi-transparante uitvoering
+function buildSuggestionIcon(L, color, emoji) {
+  const html = `
+    <div style="
+      position: relative;
+      width: 26px; height: 32px;
+      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.20));
+      opacity: 0.78;
+    ">
+      <svg viewBox="0 0 32 40" width="26" height="32" xmlns="http://www.w3.org/2000/svg">
+        <path d="M16 0 C7 0 0 7 0 16 C0 25 16 40 16 40 C16 40 32 25 32 16 C32 7 25 0 16 0 Z"
+              fill="#FAF3E1" stroke="${color}" stroke-width="2.5" stroke-dasharray="3 2"/>
+        <circle cx="16" cy="15" r="7" fill="${color}" opacity="0.18"/>
+      </svg>
+      <div style="
+        position: absolute; top: 4px; left: 0; right: 0;
+        text-align: center;
+        font-size: 12px;
+        line-height: 16px;
+      ">${emoji}</div>
+    </div>
+  `;
+  return L.divIcon({
+    html, className: '',
+    iconSize: [26, 32], iconAnchor: [13, 32], popupAnchor: [0, -28],
+  });
+}
+
 // ============ HELPER ============
 
 function dayLabel(dayKey) {
@@ -85,7 +135,7 @@ function dayLabel(dayKey) {
 
 // ============ HEADER ============
 
-const Header = ({ count, totalDays }) => (
+const Header = ({ count, totalDays, suggestionCount, showSuggestions, setShowSuggestions }) => (
   <div style={{
     padding: '14px 16px 12px',
     borderBottom: `1px solid ${COLORS.hairline}`,
@@ -104,54 +154,253 @@ const Header = ({ count, totalDays }) => (
         <ArrowLeft size={16} /> Planning
       </Link>
       <span style={{ flex: 1 }} />
-      <span style={{ fontSize: 11, color: COLORS.inkLight, letterSpacing: 1, textTransform: 'uppercase' }}>
-        {count} markers · {totalDays} dagen
-      </span>
+      <button
+        onClick={() => setShowSuggestions(!showSuggestions)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 4,
+          padding: '4px 10px',
+          background: showSuggestions ? 'rgba(201, 125, 93, 0.15)' : 'transparent',
+          color: showSuggestions ? COLORS.sunset : COLORS.inkLight,
+          border: `1px solid ${showSuggestions ? COLORS.sunset : COLORS.hairline}`,
+          borderRadius: 99,
+          cursor: 'pointer',
+          fontFamily: "'DM Sans', sans-serif",
+          fontSize: 11, fontWeight: 600, letterSpacing: 0.3,
+        }}
+        title={showSuggestions ? 'Verberg suggesties' : 'Toon suggesties'}
+      >
+        {showSuggestions ? <Eye size={11} /> : <EyeOff size={11} />}
+        Suggesties {showSuggestions ? `(${suggestionCount})` : ''}
+      </button>
     </div>
     <h1 style={{
       fontFamily: "'Fraunces', serif",
       fontSize: 22, margin: 0,
       color: COLORS.forest, fontWeight: 500, letterSpacing: '-0.01em',
     }}>
-      Kaart <span style={{ fontStyle: 'italic', color: COLORS.lake }}>· geplande activiteiten</span>
+      Kaart <span style={{ fontStyle: 'italic', color: COLORS.lake }}>· {count} markers · {totalDays} dagen</span>
     </h1>
   </div>
 );
 
 // ============ FILTER BAR ============
 
-const FilterBar = ({ filter, setFilter }) => {
-  const filters = [
-    { key: 'all', label: 'Alles' },
+const FilterBar = ({ weekFilter, setWeekFilter, dayFilter, setDayFilter }) => {
+  const scrollRef = useRef(null);
+
+  const weekFilters = [
+    { key: 'all', label: 'Alle weken' },
     { key: 'week1', label: 'Vogezen' },
     { key: 'week2', label: 'Clervaux' },
   ];
+
+  // Filter de dagen op basis van week-selectie
+  const visibleDays = useMemo(() => {
+    if (weekFilter === 'week1') return DAYS.filter(d => d.stay === 'messires');
+    if (weekFilter === 'week2') return DAYS.filter(d => d.stay === 'clervaux' || d.stay === 'transfer');
+    return DAYS;
+  }, [weekFilter]);
+
   return (
     <div style={{
-      display: 'flex', gap: 6,
-      padding: '10px 16px',
       borderBottom: `1px solid ${COLORS.hairline}`,
       background: COLORS.cream,
-      overflowX: 'auto',
       position: 'relative', zIndex: 9,
     }}>
-      {filters.map(f => (
+      {/* Week-rij */}
+      <div style={{
+        display: 'flex', gap: 6,
+        padding: '8px 16px 6px',
+        overflowX: 'auto',
+      }}>
+        {weekFilters.map(f => (
+          <button
+            key={f.key}
+            onClick={() => {
+              setWeekFilter(f.key);
+              // Als huidige dagselectie buiten nieuwe week valt, reset
+              if (dayFilter && dayFilter !== 'all') {
+                const d = DAYS.find(dd => dd.key === dayFilter);
+                if (d) {
+                  if (f.key === 'week1' && d.stay !== 'messires') setDayFilter('all');
+                  if (f.key === 'week2' && d.stay !== 'clervaux' && d.stay !== 'transfer') setDayFilter('all');
+                }
+              }
+            }}
+            style={{
+              padding: '5px 11px',
+              background: weekFilter === f.key ? COLORS.forest : 'transparent',
+              color: weekFilter === f.key ? COLORS.cream : COLORS.ink,
+              border: `1px solid ${weekFilter === f.key ? COLORS.forest : COLORS.hairline}`,
+              borderRadius: 99,
+              fontFamily: "'DM Sans', sans-serif",
+              fontSize: 11, fontWeight: 600, letterSpacing: 0.3,
+              cursor: 'pointer', whiteSpace: 'nowrap',
+            }}
+          >{f.label}</button>
+        ))}
+      </div>
+
+      {/* Dag-rij */}
+      <div
+        ref={scrollRef}
+        style={{
+          display: 'flex', gap: 5,
+          padding: '4px 16px 10px',
+          overflowX: 'auto',
+          scrollSnapType: 'x proximity',
+        }}
+      >
         <button
-          key={f.key}
-          onClick={() => setFilter(f.key)}
+          onClick={() => setDayFilter('all')}
           style={{
-            padding: '6px 12px',
-            background: filter === f.key ? COLORS.forest : 'transparent',
-            color: filter === f.key ? COLORS.cream : COLORS.ink,
-            border: `1px solid ${filter === f.key ? COLORS.forest : COLORS.hairline}`,
+            padding: '5px 11px',
+            background: dayFilter === 'all' ? COLORS.lake : 'transparent',
+            color: dayFilter === 'all' ? COLORS.cream : COLORS.inkLight,
+            border: `1px solid ${dayFilter === 'all' ? COLORS.lake : COLORS.hairline}`,
             borderRadius: 99,
             fontFamily: "'DM Sans', sans-serif",
-            fontSize: 12, fontWeight: 500,
+            fontSize: 11, fontWeight: 500,
             cursor: 'pointer', whiteSpace: 'nowrap',
+            flexShrink: 0,
           }}
-        >{f.label}</button>
-      ))}
+        >Alle dagen</button>
+        {visibleDays.map(d => {
+          const isActive = dayFilter === d.key;
+          const stay = STAYS[d.stay];
+          return (
+            <button
+              key={d.key}
+              onClick={() => setDayFilter(d.key)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 4,
+                padding: '5px 10px',
+                background: isActive ? COLORS.lake : 'transparent',
+                color: isActive ? COLORS.cream : COLORS.ink,
+                border: `1px solid ${isActive ? COLORS.lake : (stay?.color ? `${stay.color}40` : COLORS.hairline)}`,
+                borderRadius: 99,
+                fontFamily: "'DM Sans', sans-serif",
+                fontSize: 11, fontWeight: 500,
+                cursor: 'pointer', whiteSpace: 'nowrap',
+                flexShrink: 0,
+                scrollSnapAlign: 'center',
+              }}
+            >
+              <span style={{
+                fontSize: 9, fontWeight: 600, opacity: 0.7,
+                textTransform: 'uppercase', letterSpacing: 0.3,
+              }}>{d.dayShort}</span>
+              {d.date}
+            </button>
+          );
+        })}
+      </div>
     </div>
+  );
+};
+
+// ============ DAY PICKER POPUP (voor toevoegen vanaf kaart) ============
+
+const AddToDaySheet = ({ activity, plan, onPick, onClose }) => {
+  if (!activity) return null;
+  const cat = CATEGORIES[activity.category] || CATEGORIES.custom;
+
+  return (
+    <>
+      <div
+        onClick={onClose}
+        style={{
+          position: 'fixed', inset: 0,
+          background: 'rgba(31, 41, 34, 0.45)',
+          zIndex: 1000,
+          animation: 'fadeIn 0.2s ease',
+        }}
+      />
+      <div style={{
+        position: 'fixed', bottom: 0, left: 0, right: 0,
+        background: COLORS.cream,
+        borderRadius: '20px 20px 0 0',
+        maxHeight: '85vh',
+        overflowY: 'auto',
+        zIndex: 1001,
+        animation: 'slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+        boxShadow: '0 -8px 32px rgba(31, 41, 34, 0.18)',
+      }}>
+        <div style={{
+          position: 'sticky', top: 0,
+          background: COLORS.cream,
+          borderBottom: `1px solid ${COLORS.hairline}`,
+          padding: '14px 20px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          zIndex: 1,
+        }}>
+          <div style={{
+            width: 32, height: 4, background: COLORS.hairline, borderRadius: 2,
+            position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: 6,
+          }} />
+          <h3 style={{
+            margin: '8px 0 0', fontFamily: "'Fraunces', serif",
+            fontSize: 16, fontWeight: 500, color: COLORS.forest,
+            display: 'flex', alignItems: 'center', gap: 6,
+          }}>
+            <span style={{ fontSize: 18 }}>{activity.emoji}</span>
+            <span>"{activity.name}" toevoegen aan…</span>
+          </h3>
+          <button
+            onClick={onClose}
+            style={{
+              border: 'none', background: 'transparent', cursor: 'pointer',
+              padding: 4, marginTop: 8, color: COLORS.ink,
+            }}
+          ><X size={20} /></button>
+        </div>
+
+        <div style={{ padding: '16px 20px 24px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {DAYS.map(day => {
+            const count = (plan[day.key] || []).length;
+            const stay = STAYS[day.stay];
+            return (
+              <button
+                key={day.key}
+                onClick={() => onPick(day.key)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: 12,
+                  background: COLORS.creamSoft, border: 'none', borderRadius: 10,
+                  cursor: 'pointer', textAlign: 'left',
+                  fontFamily: "'DM Sans', sans-serif", width: '100%',
+                  borderLeft: `3px solid ${stay?.color || COLORS.hairline}`,
+                }}
+              >
+                <div style={{
+                  fontFamily: "'Fraunces', serif", fontSize: 11,
+                  color: COLORS.inkLight, textTransform: 'uppercase',
+                  letterSpacing: 1, minWidth: 22,
+                }}>{day.dayShort}</div>
+                <div style={{
+                  fontFamily: "'Fraunces', serif", fontSize: 16,
+                  color: COLORS.forest, fontWeight: 500, minWidth: 60,
+                }}>{day.date}</div>
+                {day.label && (
+                  <span style={{
+                    fontSize: 10, color: COLORS.lake,
+                    background: 'rgba(58, 126, 132, 0.10)',
+                    padding: '2px 8px', borderRadius: 99,
+                  }}>{day.label}</span>
+                )}
+                <span style={{ flex: 1 }} />
+                {count > 0 && (
+                  <span style={{ fontSize: 11, color: COLORS.inkLight }}>
+                    {count}
+                  </span>
+                )}
+                <Plus size={14} color={cat.color} />
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </>
   );
 };
 
@@ -205,7 +454,15 @@ export default function MapView({ authRequired }) {
   const [locationOverrides, setLocationOverrides] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [filter, setFilter] = useState('all');
+
+  // Filter state
+  const [weekFilter, setWeekFilter] = useState('all');
+  const [dayFilter, setDayFilter] = useState('all'); // 'all' | dayKey
+  const [showSuggestions, setShowSuggestions] = useState(true);
+
+  // Add-to-day sheet
+  const [pendingActivity, setPendingActivity] = useState(null);
+  const [toast, setToast] = useState(null);
 
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
@@ -238,7 +495,6 @@ export default function MapView({ authRequired }) {
     let mounted = true;
 
     (async () => {
-      // Load Leaflet CSS once
       if (!document.querySelector('link[data-leaflet]')) {
         const link = document.createElement('link');
         link.rel = 'stylesheet';
@@ -284,17 +540,31 @@ export default function MapView({ authRequired }) {
     return obj;
   }, [allActivities, locationOverrides]);
 
-  // Build marker data: { activity, days: ['2026-07-25', ...] }
+  // Effectieve week filter; wanneer een specifieke dag actief is, leiden we de week af
+  const effectiveWeekFilter = useMemo(() => {
+    if (dayFilter && dayFilter !== 'all') {
+      const d = DAYS.find(dd => dd.key === dayFilter);
+      if (d?.stay === 'messires') return 'week1';
+      if (d?.stay === 'clervaux' || d?.stay === 'transfer') return 'week2';
+    }
+    return weekFilter;
+  }, [dayFilter, weekFilter]);
+
+  // Geplande activiteiten — gegroepeerd per id met de geplande dagen
+  // markerData = [{ activity, days: [...] }]
   const markerData = useMemo(() => {
     if (!plan) return [];
     const map = new Map();
     Object.entries(plan).forEach(([dayKey, ids]) => {
       const day = DAYS.find(d => d.key === dayKey);
       if (!day) return;
-      // filter by week
-      if (filter === 'week1' && day.stay !== 'messires') return;
-      if (filter === 'week2' && day.stay !== 'clervaux' && day.stay !== 'transfer') return;
-
+      // dag-filter heeft voorrang
+      if (dayFilter !== 'all' && dayKey !== dayFilter) return;
+      // anders: week-filter
+      if (dayFilter === 'all') {
+        if (weekFilter === 'week1' && day.stay !== 'messires') return;
+        if (weekFilter === 'week2' && day.stay !== 'clervaux' && day.stay !== 'transfer') return;
+      }
       (ids || []).forEach(id => {
         const act = activityById[id];
         if (!act || !act.coords) return;
@@ -303,13 +573,65 @@ export default function MapView({ authRequired }) {
       });
     });
     return [...map.values()];
-  }, [plan, activityById, filter]);
+  }, [plan, activityById, weekFilter, dayFilter]);
+
+  // Niet-geplande activiteiten met coördinaten (suggesties)
+  // We respecteren de week-filter zodat alleen relevante suggesties verschijnen
+  const suggestionData = useMemo(() => {
+    if (!plan) return [];
+    // Verzamel alle id's die ergens gepland staan
+    const plannedIds = new Set();
+    Object.values(plan).forEach(ids => (ids || []).forEach(id => plannedIds.add(id)));
+
+    // Categorieën met geografische binding — voor filtering per week
+    const messiresCats = new Set(['camping', 'hiking', 'cycling', 'alsace', 'colmar', 'cities', 'nature', 'food']);
+    const clervauxCats = new Set(['luxembourg', 'cycling', 'hiking', 'food', 'nature', 'cities']);
+
+    return allActivities
+      .map(a => applyLocationOverride(a, locationOverrides))
+      .filter(a => a.coords && !plannedIds.has(a.id))
+      .filter(a => {
+        // Filter op week. We gebruiken coords-bereik om grof te bepalen.
+        const [lat] = a.coords;
+        if (effectiveWeekFilter === 'week1') {
+          // Vogezen/Elzas: lat 47.5–48.7
+          return lat < 49.4;
+        }
+        if (effectiveWeekFilter === 'week2') {
+          // Luxemburg/Ardennen: lat > 49.4
+          return lat >= 49.4;
+        }
+        return true;
+      });
+  }, [plan, allActivities, locationOverrides, effectiveWeekFilter]);
 
   const visibleCategories = useMemo(() => {
     const s = new Set();
     markerData.forEach(m => s.add(m.activity.category));
+    if (showSuggestions) suggestionData.forEach(a => s.add(a.category));
     return s;
-  }, [markerData]);
+  }, [markerData, suggestionData, showSuggestions]);
+
+  // Voeg activiteit toe aan een dag (vanaf kaart)
+  const addToDay = async (activityId, dayKey) => {
+    if (!plan) return;
+    const newPlan = {
+      ...plan,
+      [dayKey]: [...(plan[dayKey] || []), activityId],
+    };
+    setPlan(newPlan);
+    setPendingActivity(null);
+    const act = activityById[activityId];
+    const d = DAYS.find(dd => dd.key === dayKey);
+    setToast(`"${act?.name}" toegevoegd aan ${d?.dayShort} ${d?.date}`);
+    setTimeout(() => setToast(null), 2500);
+    try {
+      await savePlan(newPlan, customActivities, locationOverrides);
+    } catch (e) {
+      setToast('⚠️ Niet opgeslagen — controleer verbinding');
+      setTimeout(() => setToast(null), 3500);
+    }
+  };
 
   // Render markers
   useEffect(() => {
@@ -317,13 +639,12 @@ export default function MapView({ authRequired }) {
     const L = leafletRef.current;
     if (!map || !L) return;
 
-    // Clear old markers
     markersRef.current.forEach(m => m.remove());
     markersRef.current = [];
 
-    // Always add the two stay markers
+    // Stay markers
     const stayMarkers = [];
-    if (filter !== 'week2') {
+    if (effectiveWeekFilter !== 'week2') {
       const messires = L.marker(MESSIRES_COORDS, {
         icon: buildStayIcon(L, '#3A7E84', '🏕️'),
         zIndexOffset: 1000,
@@ -336,7 +657,7 @@ export default function MapView({ authRequired }) {
       );
       stayMarkers.push(messires);
     }
-    if (filter !== 'week1') {
+    if (effectiveWeekFilter !== 'week1') {
       const clervaux = L.marker(CLERVAUX_COORDS, {
         icon: buildStayIcon(L, '#B08A3E', '🏡'),
         zIndexOffset: 1000,
@@ -351,12 +672,12 @@ export default function MapView({ authRequired }) {
     }
     markersRef.current.push(...stayMarkers);
 
-    // Activity markers
+    // Geplande activiteiten — volle markers
     markerData.forEach(({ activity, days }) => {
       const cat = CATEGORIES[activity.category] || CATEGORIES.custom;
       const label = days.length === 1 ? '' : String(days.length);
       const icon = buildIcon(L, cat.color, label);
-      const marker = L.marker(activity.coords, { icon }).addTo(map);
+      const marker = L.marker(activity.coords, { icon, zIndexOffset: 500 }).addTo(map);
 
       const dayChips = days
         .sort()
@@ -407,14 +728,92 @@ export default function MapView({ authRequired }) {
       markersRef.current.push(marker);
     });
 
-    // Auto-fit bounds
+    // Suggestie-markers (niet-gepland)
+    if (showSuggestions) {
+      suggestionData.forEach(activity => {
+        const cat = CATEGORIES[activity.category] || CATEGORIES.custom;
+        const icon = buildSuggestionIcon(L, cat.color, activity.emoji);
+        const marker = L.marker(activity.coords, { icon, zIndexOffset: 200 }).addTo(map);
+
+        const noteHtml = activity.note
+          ? `<div style="font-size: 11px; color: rgba(31,41,34,0.55); margin-top: 4px;">${activity.note}</div>`
+          : '';
+
+        const popupId = `add-${activity.id}`;
+        const mapsLink = getMapsLink(activity);
+        const mapsBtn = mapsLink
+          ? `<a href="${mapsLink}" target="_blank" rel="noopener noreferrer"
+                style="
+                  display: inline-flex; align-items: center; gap: 4px;
+                  padding: 6px 10px;
+                  background: transparent;
+                  color: ${cat.color};
+                  border: 1px solid ${cat.color}80;
+                  border-radius: 8px;
+                  font-size: 11px; font-weight: 600;
+                  text-decoration: none;
+                  font-family: 'DM Sans', sans-serif;
+                ">Open Maps ↗</a>`
+          : '';
+
+        marker.bindPopup(
+          `<div style="font-family: 'DM Sans', sans-serif; min-width: 200px; max-width: 260px;">
+            <div style="display:flex; align-items:center; gap:6px; margin-bottom: 4px;">
+              <span style="font-size: 18px;">${activity.emoji}</span>
+              <div style="font-family: 'Fraunces', serif; font-size: 15px; color: #2D4F3E; font-weight: 500; line-height: 1.2;">${activity.name}</div>
+            </div>
+            <div style="
+              display: inline-block;
+              margin-top: 4px;
+              padding: 2px 8px;
+              background: ${cat.color}1A;
+              color: ${cat.color};
+              border-radius: 99px;
+              font-size: 10px; font-weight: 600;
+              letter-spacing: 0.3px;
+            ">Nog niet gepland</div>
+            ${noteHtml}
+            <div style="display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap;">
+              <button id="${popupId}"
+                style="
+                  display: inline-flex; align-items: center; gap: 4px;
+                  padding: 6px 10px;
+                  background: ${cat.color};
+                  color: #FAF3E1;
+                  border: none;
+                  border-radius: 8px;
+                  font-size: 11px; font-weight: 600;
+                  cursor: pointer;
+                  font-family: 'DM Sans', sans-serif;
+                ">+ Inplannen</button>
+              ${mapsBtn}
+            </div>
+          </div>`
+        );
+
+        // Wire up the "Inplannen" button when popup opens
+        marker.on('popupopen', () => {
+          const btn = document.getElementById(popupId);
+          if (btn) {
+            btn.onclick = () => {
+              marker.closePopup();
+              setPendingActivity(activity);
+            };
+          }
+        });
+
+        markersRef.current.push(marker);
+      });
+    }
+
+    // Auto-fit bounds — alleen bij verandering van filter, niet bij elke marker-update
     if (markersRef.current.length > 0) {
       const group = L.featureGroup(markersRef.current);
       try {
         map.fitBounds(group.getBounds().pad(0.15), { animate: false });
       } catch (e) { /* ignore */ }
     }
-  }, [markerData, filter]);
+  }, [markerData, suggestionData, showSuggestions, effectiveWeekFilter]);
 
   const totalDays = useMemo(() => {
     if (!plan) return 0;
@@ -456,15 +855,50 @@ export default function MapView({ authRequired }) {
       minHeight: '100vh',
       display: 'flex', flexDirection: 'column',
     }}>
-      <Header count={markerData.length} totalDays={totalDays} />
-      <FilterBar filter={filter} setFilter={setFilter} />
+      <Header
+        count={markerData.length}
+        totalDays={totalDays}
+        suggestionCount={suggestionData.length}
+        showSuggestions={showSuggestions}
+        setShowSuggestions={setShowSuggestions}
+      />
+      <FilterBar
+        weekFilter={weekFilter}
+        setWeekFilter={setWeekFilter}
+        dayFilter={dayFilter}
+        setDayFilter={setDayFilter}
+      />
       <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
         <div
           ref={mapContainerRef}
           style={{ position: 'absolute', inset: 0, background: '#dde6e6' }}
         />
         <Legend visibleCategories={visibleCategories} />
+        {toast && (
+          <div style={{
+            position: 'absolute',
+            top: 16, left: '50%', transform: 'translateX(-50%)',
+            background: COLORS.forest, color: COLORS.cream,
+            padding: '10px 16px', borderRadius: 99,
+            fontSize: 13, fontWeight: 500,
+            boxShadow: '0 4px 14px rgba(0,0,0,0.25)',
+            zIndex: 999,
+            animation: 'fadeIn 0.2s ease',
+            maxWidth: 'calc(100% - 32px)',
+            textAlign: 'center',
+          }}>{toast}</div>
+        )}
       </div>
+
+      {pendingActivity && (
+        <AddToDaySheet
+          activity={pendingActivity}
+          plan={plan}
+          onPick={(dayKey) => addToDay(pendingActivity.id, dayKey)}
+          onClose={() => setPendingActivity(null)}
+        />
+      )}
+
       <style>{`
         .leaflet-popup-content-wrapper {
           border-radius: 12px !important;
@@ -477,6 +911,8 @@ export default function MapView({ authRequired }) {
           margin: 12px 14px !important;
         }
         html, body { overflow: hidden; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
       `}</style>
     </div>
   );
