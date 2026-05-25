@@ -19,6 +19,7 @@ function emptyState() {
   return {
     plan: SUGGESTED_PLAN,
     customActivities: [],
+    locationOverrides: {},
     updatedAt: null,
     updatedBy: null,
     isInitial: true,
@@ -53,6 +54,7 @@ export async function GET(request) {
     return NextResponse.json({
       plan: data.plan || {},
       customActivities: Array.isArray(data.customActivities) ? data.customActivities : [],
+      locationOverrides: (data.locationOverrides && typeof data.locationOverrides === 'object') ? data.locationOverrides : {},
       updatedAt: data.updatedAt || null,
       updatedBy: data.updatedBy || null,
       isInitial: false,
@@ -76,6 +78,7 @@ export async function PUT(request) {
     const data = {
       plan: body.plan && typeof body.plan === 'object' ? body.plan : {},
       customActivities: Array.isArray(body.customActivities) ? body.customActivities : [],
+      locationOverrides: (body.locationOverrides && typeof body.locationOverrides === 'object') ? body.locationOverrides : {},
       updatedAt: new Date().toISOString(),
       updatedBy: typeof body.updatedBy === 'string' ? body.updatedBy.slice(0, 40) : null,
     };
