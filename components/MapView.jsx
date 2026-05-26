@@ -6,7 +6,9 @@ import { ArrowLeft, Filter, X, ExternalLink, ChevronLeft, ChevronRight, Plus, Ey
 import {
   COLORS, CATEGORIES, DEFAULT_ACTIVITIES, DAYS, SUGGESTED_PLAN, STAYS,
   MESSIRES_COORDS, CLERVAUX_COORDS, getMapsLink, applyLocationOverride,
+  formatDistance, formatDuration, getDayStartCoords, getDayEndCoords,
 } from '@/lib/data';
+import { fetchRoute } from '@/lib/useRoute';
 
 // ============ API CLIENT ============
 
@@ -123,6 +125,34 @@ function buildSuggestionIcon(L, color, emoji) {
   return L.divIcon({
     html, className: '',
     iconSize: [26, 32], iconAnchor: [13, 32], popupAnchor: [0, -28],
+  });
+}
+
+// Genummerde marker (1, 2, 3...) voor dag-route
+function buildNumberedIcon(L, color, num) {
+  const html = `
+    <div style="
+      position: relative;
+      width: 34px; height: 42px;
+      filter: drop-shadow(0 2px 3px rgba(0,0,0,0.35));
+    ">
+      <svg viewBox="0 0 32 40" width="34" height="42" xmlns="http://www.w3.org/2000/svg">
+        <path d="M16 0 C7 0 0 7 0 16 C0 25 16 40 16 40 C16 40 32 25 32 16 C32 7 25 0 16 0 Z"
+              fill="${color}" stroke="#FAF3E1" stroke-width="2"/>
+        <circle cx="16" cy="15" r="8" fill="#FAF3E1"/>
+      </svg>
+      <div style="
+        position: absolute; top: 5px; left: 0; right: 0;
+        text-align: center;
+        font-family: 'DM Sans', sans-serif;
+        font-size: 13px; font-weight: 700; color: ${color};
+        line-height: 18px;
+      ">${num}</div>
+    </div>
+  `;
+  return L.divIcon({
+    html, className: '',
+    iconSize: [34, 42], iconAnchor: [17, 42], popupAnchor: [0, -38],
   });
 }
 
@@ -467,7 +497,11 @@ export default function MapView({ authRequired }) {
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
   const markersRef = useRef([]);
+  const routeLayerRef = useRef(null);
   const leafletRef = useRef(null);
+
+  // Route-data voor geselecteerde dag
+  const [dayRoute, setDayRoute] = useState(null);
 
   // Fetch plan from server
   useEffect(() => {
@@ -612,6 +646,40 @@ export default function MapView({ authRequired }) {
     return s;
   }, [markerData, suggestionData, showSuggestions]);
 
+  // Bepaal route-punten voor geselecteerde dag
+  const dayRoutePoints = useMemo(() => {
+    if (dayFilter === 'all' || !plan) return null;
+    const day = DAYS.find(d => d.key === dayFilter);
+    if (!day) return null;
+    const ids = plan[dayFilter] || [];
+    const acts = ids.map(id => activityById[id]).filter(a => a && a.coords);
+    if (acts.length === 0) return null;
+    const start = getDayStartCoords(day);
+    const end = getDayEndCoords(day);
+    const pts = [start, ...acts.map(a => a.coords), end];
+    // Dedupliceer aangrenzende identieke coördinaten
+    const cleaned = pts.filter((p, i) => {
+      if (i === 0) return true;
+      const [la, ln] = p;
+      const [pla, pln] = pts[i - 1];
+      return Math.abs(la - pla) > 0.0001 || Math.abs(ln - pln) > 0.0001;
+    });
+    return cleaned.length >= 2 ? cleaned : null;
+  }, [dayFilter, plan, activityById]);
+
+  // Fetch route wanneer dag-selectie verandert
+  useEffect(() => {
+    if (!dayRoutePoints) {
+      setDayRoute(null);
+      return;
+    }
+    let cancelled = false;
+    fetchRoute(dayRoutePoints)
+      .then(r => { if (!cancelled) setDayRoute(r); })
+      .catch(() => { if (!cancelled) setDayRoute(null); });
+    return () => { cancelled = true; };
+  }, [dayRoutePoints]);
+
   // Voeg activiteit toe aan een dag (vanaf kaart)
   const addToDay = async (activityId, dayKey) => {
     if (!plan) return;
@@ -672,11 +740,28 @@ export default function MapView({ authRequired }) {
     }
     markersRef.current.push(...stayMarkers);
 
+    // Bepaal volgorde van markers wanneer een specifieke dag is geselecteerd
+    // Dan willen we ze nummeren in de volgorde waarop ze in het dagplan staan
+    const dayOrderMap = {};
+    if (dayFilter !== 'all' && plan) {
+      const ids = plan[dayFilter] || [];
+      ids.forEach((id, i) => {
+        // Eerste keer voorkomen wint
+        if (dayOrderMap[id] === undefined) dayOrderMap[id] = i;
+      });
+    }
+    const useNumbered = dayFilter !== 'all';
+
     // Geplande activiteiten — volle markers
     markerData.forEach(({ activity, days }) => {
       const cat = CATEGORIES[activity.category] || CATEGORIES.custom;
-      const label = days.length === 1 ? '' : String(days.length);
-      const icon = buildIcon(L, cat.color, label);
+      let icon;
+      if (useNumbered && dayOrderMap[activity.id] !== undefined) {
+        icon = buildNumberedIcon(L, cat.color, dayOrderMap[activity.id] + 1);
+      } else {
+        const label = days.length === 1 ? '' : String(days.length);
+        icon = buildIcon(L, cat.color, label);
+      }
       const marker = L.marker(activity.coords, { icon, zIndexOffset: 500 }).addTo(map);
 
       const dayChips = days
@@ -806,14 +891,36 @@ export default function MapView({ authRequired }) {
       });
     }
 
+    // Teken route-lijn als een specifieke dag is geselecteerd en route data beschikbaar is
+    if (routeLayerRef.current) {
+      routeLayerRef.current.remove();
+      routeLayerRef.current = null;
+    }
+    if (dayFilter !== 'all' && dayRoute?.geometry) {
+      // GeoJSON LineString → Leaflet wil [lat, lng]
+      const coords = dayRoute.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+      const polyline = L.polyline(coords, {
+        color: COLORS.lake,
+        weight: 4,
+        opacity: 0.85,
+        dashArray: '8 6',
+        lineCap: 'round',
+        lineJoin: 'round',
+      }).addTo(map);
+      routeLayerRef.current = polyline;
+    }
+
     // Auto-fit bounds — alleen bij verandering van filter, niet bij elke marker-update
     if (markersRef.current.length > 0) {
-      const group = L.featureGroup(markersRef.current);
+      const allLayers = routeLayerRef.current
+        ? [...markersRef.current, routeLayerRef.current]
+        : markersRef.current;
+      const group = L.featureGroup(allLayers);
       try {
         map.fitBounds(group.getBounds().pad(0.15), { animate: false });
       } catch (e) { /* ignore */ }
     }
-  }, [markerData, suggestionData, showSuggestions, effectiveWeekFilter]);
+  }, [markerData, suggestionData, showSuggestions, effectiveWeekFilter, dayFilter, dayRoute]);
 
   const totalDays = useMemo(() => {
     if (!plan) return 0;
@@ -873,6 +980,38 @@ export default function MapView({ authRequired }) {
           ref={mapContainerRef}
           style={{ position: 'absolute', inset: 0, background: '#dde6e6' }}
         />
+        {dayFilter !== 'all' && dayRoute && dayRoute.totalDistance > 0 && (
+          <div style={{
+            position: 'absolute',
+            top: 12, left: 12, right: 12,
+            background: 'rgba(244, 235, 213, 0.96)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            borderRadius: 10,
+            padding: '8px 12px',
+            border: `1px solid ${COLORS.hairline}`,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.10)',
+            display: 'flex', alignItems: 'center', gap: 10,
+            fontSize: 12, color: COLORS.lake, fontWeight: 600,
+            zIndex: 400,
+          }}>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center',
+              padding: '2px 8px', borderRadius: 99,
+              background: 'rgba(58, 126, 132, 0.12)',
+              fontSize: 11, letterSpacing: 0.3,
+            }}>
+              {DAYS.find(d => d.key === dayFilter)?.dayShort} {DAYS.find(d => d.key === dayFilter)?.date}
+            </span>
+            <span>{formatDistance(dayRoute.totalDistance)}</span>
+            <span style={{ opacity: 0.5 }}>·</span>
+            <span>{formatDuration(dayRoute.totalDuration)} rijden</span>
+            <span style={{ flex: 1 }} />
+            <span style={{ fontSize: 9, color: COLORS.inkLight, fontWeight: 500, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              heen+terug
+            </span>
+          </div>
+        )}
         <Legend visibleCategories={visibleCategories} />
         {toast && (
           <div style={{
