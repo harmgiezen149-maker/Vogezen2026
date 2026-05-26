@@ -5,11 +5,13 @@ import Link from 'next/link';
 import {
   Plus, X, Trash2, RotateCcw, Sparkles, Calendar as CalendarIcon,
   ChevronRight, RefreshCw, User, Wifi, WifiOff, Check, AlertCircle, Lock, MapPin, Map as MapIcon,
-  Pencil, Search, Loader2,
+  Pencil, Search, Loader2, Navigation, Car, ChevronUp, ChevronDown,
 } from 'lucide-react';
 import {
   COLORS, CATEGORIES, DEFAULT_ACTIVITIES, DAYS, SUGGESTED_PLAN, STAYS, getMapsLink, applyLocationOverride,
+  formatDistance, formatDuration, getDayStartCoords, getDayEndCoords,
 } from '@/lib/data';
+import { useRoute } from '@/lib/useRoute';
 
 // ============ API CLIENT ============
 
@@ -386,16 +388,55 @@ const TabBar = ({ active, setActive }) => (
 
 // ============ ACTIVITY CHIP ============
 
-const ActivityChip = ({ activity, onRemove, onEditLocation }) => {
+const ActivityChip = ({ activity, onRemove, onEditLocation, onMoveUp, onMoveDown, canMoveUp, canMoveDown }) => {
   const cat = CATEGORIES[activity.category] || CATEGORIES.custom;
   const mapsLink = getMapsLink(activity);
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: 8,
-      background: COLORS.creamSoft, borderRadius: 10, padding: '10px 12px',
+      display: 'flex', alignItems: 'center', gap: 6,
+      background: COLORS.creamSoft, borderRadius: 10, padding: '10px 10px 10px 6px',
       borderLeft: `3px solid ${cat.color}`,
       boxShadow: '0 1px 2px rgba(31,41,34,0.04)',
     }}>
+      {/* Volgorde-knoppen */}
+      <div style={{
+        display: 'flex', flexDirection: 'column', gap: 1,
+        flexShrink: 0,
+      }}>
+        <button
+          onClick={onMoveUp}
+          disabled={!canMoveUp}
+          style={{
+            border: 'none', background: 'transparent',
+            cursor: canMoveUp ? 'pointer' : 'default',
+            color: canMoveUp ? COLORS.ink : COLORS.hairline,
+            padding: '1px 2px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            opacity: canMoveUp ? 1 : 0.35,
+          }}
+          aria-label="Omhoog"
+          title="Omhoog"
+        >
+          <ChevronUp size={14} />
+        </button>
+        <button
+          onClick={onMoveDown}
+          disabled={!canMoveDown}
+          style={{
+            border: 'none', background: 'transparent',
+            cursor: canMoveDown ? 'pointer' : 'default',
+            color: canMoveDown ? COLORS.ink : COLORS.hairline,
+            padding: '1px 2px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            opacity: canMoveDown ? 1 : 0.35,
+          }}
+          aria-label="Omlaag"
+          title="Omlaag"
+        >
+          <ChevronDown size={14} />
+        </button>
+      </div>
+
       <span style={{ fontSize: 18 }}>{activity.emoji}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
@@ -453,9 +494,39 @@ const ActivityChip = ({ activity, onRemove, onEditLocation }) => {
 
 // ============ DAY CARD ============
 
-const DayCard = ({ day, activities, activityById, onAddClick, onRemove, onEditLocation }) => {
+const DayCard = ({ day, activities, activityById, onAddClick, onRemove, onEditLocation, onMove }) => {
   const hasActivities = activities.length > 0;
   const stay = STAYS[day.stay];
+
+  // Verzamel coords voor route-berekening
+  const routePoints = useMemo(() => {
+    const acts = activities.map(id => activityById[id]).filter(a => a && a.coords);
+    if (acts.length === 0) return [];
+    const start = getDayStartCoords(day);
+    const end = getDayEndCoords(day);
+    const pts = [start];
+    acts.forEach(a => pts.push(a.coords));
+    pts.push(end);
+    // Dedupliceer aangrenzende identieke coördinaten (bv. activiteit op de camping zelf)
+    const cleaned = pts.filter((p, i) => {
+      if (i === 0) return true;
+      const [la, ln] = p;
+      const [pla, pln] = pts[i - 1];
+      return Math.abs(la - pla) > 0.0001 || Math.abs(ln - pln) > 0.0001;
+    });
+    return cleaned.length >= 2 ? cleaned : [];
+  }, [activities, activityById, day]);
+
+  const { route } = useRoute(routePoints, hasActivities);
+
+  // Map segment-index naar activity-index voor inline tussendoor-labels.
+  // routePoints: [start, act0, act1, ..., actN, end]
+  // segments[i] = van punt i naar punt i+1
+  // We tonen het segment NA elke activiteit (dus segments[1] tot segments[N])
+  // En segments[0] = van basis naar eerste activiteit (boven eerste chip)
+  // segments[N+1] = van laatste activiteit terug naar basis (onder laatste chip)
+  // We tonen alleen segmenten als ze >100m zijn (minder ruis)
+
   return (
     <div style={{
       background: hasActivities ? COLORS.creamSoft : 'rgba(250, 243, 225, 0.4)',
@@ -496,18 +567,77 @@ const DayCard = ({ day, activities, activityById, onAddClick, onRemove, onEditLo
         )}
       </div>
 
+      {/* Route-totaal: tonen als er activiteiten met coords zijn */}
+      {hasActivities && route && route.totalDistance > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          marginBottom: 10,
+          padding: '6px 10px',
+          background: 'rgba(58, 126, 132, 0.06)',
+          borderRadius: 8,
+          fontSize: 11,
+          color: COLORS.lake,
+          fontWeight: 600,
+          letterSpacing: 0.2,
+        }}>
+          <Car size={12} />
+          <span>{formatDistance(route.totalDistance)}</span>
+          <span style={{ opacity: 0.5 }}>·</span>
+          <span>{formatDuration(route.totalDuration)} rijden</span>
+          <span style={{ flex: 1 }} />
+          <span style={{ fontSize: 9, color: COLORS.inkLight, fontWeight: 500 }}>
+            heen + terug
+          </span>
+        </div>
+      )}
+
       {hasActivities && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
           {activities.map((actId, idx) => {
             const activity = activityById[actId];
             if (!activity) return null;
+
+            // Bereken het segment-label dat HIERVOOR moet komen
+            // Eerst tellen we hoeveel activiteiten met coords er zijn vóór deze
+            const actsWithCoords = activities
+              .map((id, i) => ({ id, i, act: activityById[id] }))
+              .filter(x => x.act && x.act.coords);
+            const myIndexInRoute = actsWithCoords.findIndex(x => x.i === idx);
+            // routePoints index: 0 = start, 1 = eerste activiteit, etc.
+            // segment[k] = van routePoints[k] naar routePoints[k+1]
+            // dus segment dat naar deze activiteit leidt = segments[myIndexInRoute]
+            const segment = (activity.coords && route && myIndexInRoute >= 0)
+              ? route.segments?.[myIndexInRoute]
+              : null;
+
             return (
-              <ActivityChip
-                key={`${actId}-${idx}`}
-                activity={activity}
-                onRemove={() => onRemove(day.key, idx)}
-                onEditLocation={onEditLocation}
-              />
+              <React.Fragment key={`${actId}-${idx}`}>
+                {segment && segment.distance > 100 && (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    paddingLeft: 6,
+                    fontSize: 10,
+                    color: COLORS.inkLight,
+                    fontWeight: 500,
+                  }}>
+                    <div style={{
+                      width: 1, height: 10,
+                      background: COLORS.hairline,
+                      marginLeft: 11,
+                    }} />
+                    <span>↓ {formatDistance(segment.distance)} · {formatDuration(segment.duration)}</span>
+                  </div>
+                )}
+                <ActivityChip
+                  activity={activity}
+                  onRemove={() => onRemove(day.key, idx)}
+                  onEditLocation={onEditLocation}
+                  onMoveUp={() => onMove(day.key, idx, idx - 1)}
+                  onMoveDown={() => onMove(day.key, idx, idx + 1)}
+                  canMoveUp={idx > 0}
+                  canMoveDown={idx < activities.length - 1}
+                />
+              </React.Fragment>
             );
           })}
         </div>
@@ -534,7 +664,7 @@ const DayCard = ({ day, activities, activityById, onAddClick, onRemove, onEditLo
 
 // ============ PLAN VIEW ============
 
-const PlanView = ({ plan, activityById, onAddClick, onRemove, onEditLocation }) => (
+const PlanView = ({ plan, activityById, onAddClick, onRemove, onEditLocation, onMove }) => (
   <div style={{ padding: '16px 20px 100px', display: 'flex', flexDirection: 'column', gap: 12 }}>
     {DAYS.map(day => (
       <DayCard
@@ -545,6 +675,7 @@ const PlanView = ({ plan, activityById, onAddClick, onRemove, onEditLocation }) 
         onAddClick={onAddClick}
         onRemove={onRemove}
         onEditLocation={onEditLocation}
+        onMove={onMove}
       />
     ))}
   </div>
@@ -1416,6 +1547,16 @@ export default function Planner({ authRequired }) {
     setPlan(p => ({ ...p, [dayKey]: (p[dayKey] || []).filter((_, i) => i !== index) }));
   };
 
+  const moveInDay = (dayKey, fromIdx, toIdx) => {
+    setPlan(p => {
+      const ids = [...(p[dayKey] || [])];
+      if (toIdx < 0 || toIdx >= ids.length || fromIdx === toIdx) return p;
+      const [moved] = ids.splice(fromIdx, 1);
+      ids.splice(toIdx, 0, moved);
+      return { ...p, [dayKey]: ids };
+    });
+  };
+
   const createCustom = (data, andAddToDay) => {
     const newId = `custom_${Date.now()}`;
     // Splits locatie-velden af; die staan ook al in data zelf zodat ze direct werken
@@ -1531,6 +1672,7 @@ export default function Planner({ authRequired }) {
             onAddClick={(dayKey) => setSheet({ type: 'pick-activity', dayKey })}
             onRemove={removeFromDay}
             onEditLocation={(act) => setSheet({ type: 'edit-location', activityId: act.id })}
+            onMove={moveInDay}
           />
         ) : (
           <LibraryView
