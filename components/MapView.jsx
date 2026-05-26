@@ -910,8 +910,43 @@ export default function MapView({ authRequired }) {
       routeLayerRef.current = polyline;
     }
 
-    // Auto-fit bounds — alleen bij verandering van filter, niet bij elke marker-update
-    if (markersRef.current.length > 0) {
+    // Auto-fit:
+    //  - Specifieke dag geselecteerd + route geladen: zoom in op de dag-route + de marker iconen
+    //    (gebruikt alleen de dag-markers, niet alle suggesties)
+    //  - Anders: zoom op alle zichtbare markers (week- of all-view)
+    if (dayFilter !== 'all') {
+      // Bij dag-selectie: alleen op de daadwerkelijke dag-route + dag-markers
+      const dayActivityIds = new Set(plan?.[dayFilter] || []);
+      const dayMarkers = markersRef.current.filter(m => {
+        // De stay-markers willen we niet meenemen want die kunnen ver buiten beeld liggen
+        const opts = m.options || {};
+        return opts.zIndexOffset !== 1000; // 1000 = stay marker
+      });
+      // We willen wél de route-lijn en de markers van deze dag
+      // Markers van deze dag = markers waarvan de coords matchen met dag-activiteiten
+      const dayCoords = (plan?.[dayFilter] || [])
+        .map(id => activityById[id])
+        .filter(a => a && a.coords)
+        .map(a => a.coords);
+
+      // Voeg ook start/eind coords toe (camping)
+      const day = DAYS.find(d => d.key === dayFilter);
+      if (day) {
+        dayCoords.push(getDayStartCoords(day));
+        dayCoords.push(getDayEndCoords(day));
+      }
+
+      if (dayCoords.length > 0) {
+        try {
+          // Gebruik route-geometrie indien beschikbaar voor strakkere bounds
+          const bounds = routeLayerRef.current
+            ? routeLayerRef.current.getBounds()
+            : L.latLngBounds(dayCoords);
+          map.fitBounds(bounds.pad(0.15), { animate: true, duration: 0.6 });
+        } catch (e) { /* ignore */ }
+      }
+    } else if (markersRef.current.length > 0) {
+      // Alle dagen of week-filter: gebruik alle markers
       const allLayers = routeLayerRef.current
         ? [...markersRef.current, routeLayerRef.current]
         : markersRef.current;
@@ -920,7 +955,7 @@ export default function MapView({ authRequired }) {
         map.fitBounds(group.getBounds().pad(0.15), { animate: false });
       } catch (e) { /* ignore */ }
     }
-  }, [markerData, suggestionData, showSuggestions, effectiveWeekFilter, dayFilter, dayRoute]);
+  }, [markerData, suggestionData, showSuggestions, effectiveWeekFilter, dayFilter, dayRoute, plan, activityById]);
 
   const totalDays = useMemo(() => {
     if (!plan) return 0;
