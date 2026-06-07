@@ -5,7 +5,7 @@ import Link from 'next/link';
 import {
   Plus, X, Trash2, RotateCcw, Sparkles, Calendar as CalendarIcon,
   ChevronRight, RefreshCw, User, Wifi, WifiOff, Check, AlertCircle, Lock, MapPin, Map as MapIcon,
-  Pencil, Search, Loader2, Navigation, Car, ChevronUp, ChevronDown,
+  Pencil, Search, Loader2, Navigation, Car, ChevronUp, ChevronDown, CheckSquare,
 } from 'lucide-react';
 import {
   COLORS, CATEGORIES, DEFAULT_ACTIVITIES, DAYS, SUGGESTED_PLAN, STAYS, getMapsLink, applyLocationOverride,
@@ -232,6 +232,22 @@ const Header = ({ stats, name, onNameChange, syncStatus, lastUpdate, onRefresh }
           }}
         >
           <MapIcon size={11} /> Kaart
+        </Link>
+        <Link
+          href="/checklist"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 4,
+            padding: '4px 9px',
+            background: 'rgba(58, 126, 132, 0.10)',
+            color: COLORS.lake,
+            borderRadius: 99,
+            fontSize: 11, fontWeight: 600,
+            textDecoration: 'none',
+            letterSpacing: 0.3,
+            fontFamily: "'DM Sans', sans-serif",
+          }}
+        >
+          <CheckSquare size={11} /> Auto
         </Link>
         <SyncIndicator status={syncStatus} onRefresh={onRefresh} />
       </div>
