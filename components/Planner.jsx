@@ -217,54 +217,6 @@ const Header = ({ stats, name, onNameChange, syncStatus, lastUpdate, onRefresh }
           Familie · Vakantie 2026
         </span>
         <span style={{ flex: 1, height: 1, background: COLORS.hairline }} />
-        <Link
-          href="/kaart"
-          style={{
-            display: 'flex', alignItems: 'center', gap: 4,
-            padding: '4px 9px',
-            background: 'rgba(58, 126, 132, 0.10)',
-            color: COLORS.lake,
-            borderRadius: 99,
-            fontSize: 11, fontWeight: 600,
-            textDecoration: 'none',
-            letterSpacing: 0.3,
-            fontFamily: "'DM Sans', sans-serif",
-          }}
-        >
-          <MapIcon size={11} /> Kaart
-        </Link>
-        <Link
-          href="/checklist"
-          style={{
-            display: 'flex', alignItems: 'center', gap: 4,
-            padding: '4px 9px',
-            background: 'rgba(58, 126, 132, 0.10)',
-            color: COLORS.lake,
-            borderRadius: 99,
-            fontSize: 11, fontWeight: 600,
-            textDecoration: 'none',
-            letterSpacing: 0.3,
-            fontFamily: "'DM Sans', sans-serif",
-          }}
-        >
-          <CheckSquare size={11} /> Auto
-        </Link>
-        <Link
-          href="/inpakken"
-          style={{
-            display: 'flex', alignItems: 'center', gap: 4,
-            padding: '4px 9px',
-            background: 'rgba(58, 126, 132, 0.10)',
-            color: COLORS.lake,
-            borderRadius: 99,
-            fontSize: 11, fontWeight: 600,
-            textDecoration: 'none',
-            letterSpacing: 0.3,
-            fontFamily: "'DM Sans', sans-serif",
-          }}
-        >
-          <Backpack size={11} /> Inpakken
-        </Link>
         <SyncIndicator status={syncStatus} onRefresh={onRefresh} />
       </div>
 
@@ -282,6 +234,48 @@ const Header = ({ stats, name, onNameChange, syncStatus, lastUpdate, onRefresh }
       <p style={{ margin: '10px 0 0', color: COLORS.ink, fontSize: 13, lineHeight: 1.5 }}>
         Messires & Clervaux · 25 juli — 15 augustus
       </p>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 18 }}>
+        {[
+          { href: '/kaart', icon: <MapIcon size={22} />, label: 'Kaart', desc: 'Activiteiten & routes' },
+          { href: '/checklist', icon: <CheckSquare size={22} />, label: 'Auto & documenten', desc: 'Wat moet geregeld zijn' },
+          { href: '/inpakken', icon: <Backpack size={22} />, label: 'Inpaklijst', desc: 'Wat gaat er mee' },
+        ].map((b) => (
+          <Link
+            key={b.href}
+            href={b.href}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 14,
+              padding: '16px 18px',
+              background: 'rgba(58, 126, 132, 0.10)',
+              color: COLORS.forest,
+              borderRadius: 16,
+              textDecoration: 'none',
+              fontFamily: "'DM Sans', sans-serif",
+            }}
+          >
+            <span style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 44, height: 44, borderRadius: 12,
+              background: COLORS.card || '#fff', color: COLORS.lake, flexShrink: 0,
+            }}>
+              {b.icon}
+            </span>
+            <span style={{ flex: 1 }}>
+              <span style={{
+                display: 'block', fontFamily: "'Fraunces', serif",
+                fontSize: 19, fontWeight: 600, lineHeight: 1.1,
+              }}>
+                {b.label}
+              </span>
+              <span style={{ display: 'block', fontSize: 13, color: COLORS.lake, marginTop: 2 }}>
+                {b.desc}
+              </span>
+            </span>
+            <ChevronRight size={20} style={{ color: COLORS.lake, flexShrink: 0 }} />
+          </Link>
+        ))}
+      </div>
 
       <div style={{ display: 'flex', gap: 14, marginTop: 14, fontSize: 13, alignItems: 'flex-end' }}>
         <div>
