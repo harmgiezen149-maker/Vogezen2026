@@ -220,61 +220,50 @@ const Header = ({ stats, name, onNameChange, syncStatus, lastUpdate, onRefresh }
         <SyncIndicator status={syncStatus} onRefresh={onRefresh} />
       </div>
 
-      <h1 style={{
-        fontFamily: "'Fraunces', serif",
-        fontSize: 36, lineHeight: 1.05, margin: 0,
-        color: COLORS.forest, fontWeight: 500, letterSpacing: '-0.02em',
-      }}>
-        Vogezen, Elzas<br />
-        <span style={{ fontStyle: 'italic', fontWeight: 400, color: COLORS.lake }}>
-          & Clervaux
-        </span>
-      </h1>
-
-      <p style={{ margin: '10px 0 0', color: COLORS.ink, fontSize: 13, lineHeight: 1.5 }}>
-        Messires & Clervaux · 25 juli — 15 augustus
-      </p>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 18 }}>
-        {[
-          { href: '/kaart', icon: <MapIcon size={22} />, label: 'Kaart', desc: 'Activiteiten & routes' },
-          { href: '/checklist', icon: <CheckSquare size={22} />, label: 'Auto & documenten', desc: 'Wat moet geregeld zijn' },
-          { href: '/inpakken', icon: <Backpack size={22} />, label: 'Inpaklijst', desc: 'Wat gaat er mee' },
-        ].map((b) => (
-          <Link
-            key={b.href}
-            href={b.href}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 14,
-              padding: '16px 18px',
-              background: 'rgba(58, 126, 132, 0.10)',
-              color: COLORS.forest,
-              borderRadius: 16,
-              textDecoration: 'none',
-              fontFamily: "'DM Sans', sans-serif",
-            }}
-          >
-            <span style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              width: 44, height: 44, borderRadius: 12,
-              background: COLORS.card || '#fff', color: COLORS.lake, flexShrink: 0,
-            }}>
-              {b.icon}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <div style={{ flex: '1 1 240px', minWidth: 200 }}>
+          <h1 style={{
+            fontFamily: "'Fraunces', serif",
+            fontSize: 36, lineHeight: 1.05, margin: 0,
+            color: COLORS.forest, fontWeight: 500, letterSpacing: '-0.02em',
+          }}>
+            Vogezen, Elzas<br />
+            <span style={{ fontStyle: 'italic', fontWeight: 400, color: COLORS.lake }}>
+              & Clervaux
             </span>
-            <span style={{ flex: 1 }}>
-              <span style={{
-                display: 'block', fontFamily: "'Fraunces', serif",
-                fontSize: 19, fontWeight: 600, lineHeight: 1.1,
-              }}>
-                {b.label}
-              </span>
-              <span style={{ display: 'block', fontSize: 13, color: COLORS.lake, marginTop: 2 }}>
-                {b.desc}
-              </span>
-            </span>
-            <ChevronRight size={20} style={{ color: COLORS.lake, flexShrink: 0 }} />
-          </Link>
-        ))}
+          </h1>
+
+          <p style={{ margin: '10px 0 0', color: COLORS.ink, fontSize: 13, lineHeight: 1.5 }}>
+            Messires & Clervaux · 25 juli — 15 augustus
+          </p>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: '0 1 200px', minWidth: 170 }}>
+          {[
+            { href: '/kaart', icon: <MapIcon size={18} />, label: 'Kaart' },
+            { href: '/checklist', icon: <CheckSquare size={18} />, label: 'Auto & documenten' },
+            { href: '/inpakken', icon: <Backpack size={18} />, label: 'Inpaklijst' },
+          ].map((b) => (
+            <Link
+              key={b.href}
+              href={b.href}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '11px 13px',
+                background: 'rgba(58, 126, 132, 0.10)',
+                color: COLORS.forest,
+                borderRadius: 12,
+                textDecoration: 'none',
+                fontFamily: "'DM Sans', sans-serif",
+                fontSize: 14, fontWeight: 600,
+              }}
+            >
+              <span style={{ color: COLORS.lake, display: 'flex', flexShrink: 0 }}>{b.icon}</span>
+              <span style={{ flex: 1 }}>{b.label}</span>
+              <ChevronRight size={16} style={{ color: COLORS.lake, flexShrink: 0 }} />
+            </Link>
+          ))}
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: 14, marginTop: 14, fontSize: 13, alignItems: 'flex-end' }}>
