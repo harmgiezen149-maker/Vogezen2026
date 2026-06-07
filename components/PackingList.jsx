@@ -18,6 +18,10 @@ export default function PackingList() {
   const [newCat, setNewCat] = useState('');
   const [draftItem, setDraftItem] = useState({}); // { [catId]: { label, qty } }
 
+  // Filters (alleen visueel, raken de opgeslagen data niet)
+  const [catFilter, setCatFilter] = useState([]); // lege array = alle categorieën
+  const [hideChecked, setHideChecked] = useState(false);
+
   const saveTimer = useRef(null);
   // Houd de laatste staat vast zodat de debounced save altijd het nieuwste pakt
   const latest = useRef({ categories: [], items: [] });
@@ -92,7 +96,11 @@ export default function PackingList() {
       categories.filter((c) => c.id !== catId),
       items.filter((it) => it.categoryId !== catId),
     );
+    setCatFilter((f) => f.filter((id) => id !== catId));
   };
+
+  const toggleCatFilter = (catId) =>
+    setCatFilter((f) => (f.includes(catId) ? f.filter((id) => id !== catId) : [...f, catId]));
 
   // ── Item-acties ────────────────────────────────────────────────────
   const addItem = (catId) => {
@@ -182,26 +190,77 @@ export default function PackingList() {
             </p>
           )}
 
-          {categories.map((cat) => {
-            const catItems = items.filter((it) => it.categoryId === cat.id);
-            const catDone = catItems.filter((it) => it.checked).length;
-            const draft = draftItem[cat.id] || {};
-            return (
-              <section key={cat.id} style={S.section}>
-                <div style={S.sectionHead}>
-                  <h2 style={S.sectionTitle}>{cat.name}</h2>
-                  <span style={S.sectionCount}>{catDone}/{catItems.length}</span>
-                  <button
-                    style={S.catDelete}
-                    onClick={() => removeCategory(cat.id)}
-                    title="Categorie verwijderen"
-                  >
-                    ✕
-                  </button>
+          {categories.length > 0 && (
+            <div style={S.filterBar}>
+              <div style={S.filterChips}>
+                <button
+                  style={{ ...S.filterChip, ...(catFilter.length === 0 ? S.filterChipOn : {}) }}
+                  onClick={() => setCatFilter([])}
+                >
+                  Alle
+                </button>
+                {categories.map((cat) => {
+                  const on = catFilter.includes(cat.id);
+                  return (
+                    <button
+                      key={cat.id}
+                      style={{ ...S.filterChip, ...(on ? S.filterChipOn : {}) }}
+                      onClick={() => toggleCatFilter(cat.id)}
+                    >
+                      {cat.name}
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                style={{ ...S.hideToggle, ...(hideChecked ? S.hideToggleOn : {}) }}
+                onClick={() => setHideChecked((v) => !v)}
+              >
+                {hideChecked ? '☑' : '☐'} Verberg ingepakt
+              </button>
+            </div>
+          )}
+
+          {(() => {
+            const visibleCats = categories.filter(
+              (cat) => catFilter.length === 0 || catFilter.includes(cat.id),
+            );
+            const anyVisibleItems = items.some(
+              (it) =>
+                (catFilter.length === 0 || catFilter.includes(it.categoryId)) &&
+                (!hideChecked || !it.checked),
+            );
+            if (visibleCats.length > 0 && !anyVisibleItems && hideChecked) {
+              return (
+                <p style={S.empty}>
+                  Alles in beeld is al ingepakt. Zet “Verberg ingepakt” uit om
+                  alles weer te zien.
+                </p>
+              );
+            }
+            return visibleCats.map((cat) => {
+              const catItems = items.filter((it) => it.categoryId === cat.id);
+              const shownItems = hideChecked
+                ? catItems.filter((it) => !it.checked)
+                : catItems;
+              const catDone = catItems.filter((it) => it.checked).length;
+              const draft = draftItem[cat.id] || {};
+              return (
+                <section key={cat.id} style={S.section}>
+                  <div style={S.sectionHead}>
+                    <h2 style={S.sectionTitle}>{cat.name}</h2>
+                    <span style={S.sectionCount}>{catDone}/{catItems.length}</span>
+                    <button
+                      style={S.catDelete}
+                      onClick={() => removeCategory(cat.id)}
+                      title="Categorie verwijderen"
+                    >
+                      ✕
+                    </button>
                 </div>
 
                 <ul style={S.list}>
-                  {catItems.map((it) => (
+                  {shownItems.map((it) => (
                     <li key={it.id}>
                       <div style={{ ...S.item, ...(it.checked ? S.itemOn : {}) }}>
                         <button
@@ -251,7 +310,8 @@ export default function PackingList() {
                 </div>
               </section>
             );
-          })}
+            });
+          })()}
 
           <div style={S.addCatCard}>
             <input
@@ -304,6 +364,12 @@ const S = {
   loading: { color: '#a8a29e', fontStyle: 'italic' },
   empty: { color: '#a8a29e', fontStyle: 'italic', lineHeight: 1.5, marginTop: 0 },
   sections: { display: 'flex', flexDirection: 'column', gap: 22 },
+  filterBar: { display: 'flex', flexDirection: 'column', gap: 10, padding: '14px', background: '#fff', border: '1px solid #ece7dd', borderRadius: 14 },
+  filterChips: { display: 'flex', flexWrap: 'wrap', gap: 6 },
+  filterChip: { fontFamily: 'inherit', fontSize: 13, fontWeight: 600, padding: '6px 12px', borderRadius: 99, border: '1px solid #e0dad0', background: paper, color: '#57534e', cursor: 'pointer' },
+  filterChipOn: { background: teal, borderColor: teal, color: '#fff' },
+  hideToggle: { fontFamily: 'inherit', fontSize: 13, fontWeight: 600, padding: '8px 12px', borderRadius: 10, border: '1px solid #e0dad0', background: paper, color: '#57534e', cursor: 'pointer', textAlign: 'left' },
+  hideToggleOn: { background: tealSoft, borderColor: tealSoft, color: teal },
   section: {},
   sectionHead: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, paddingBottom: 6, borderBottom: `2px solid ${tealSoft}` },
   sectionTitle: { fontFamily: "'Fraunces', serif", fontSize: 19, fontWeight: 600, margin: 0, flex: 1 },
