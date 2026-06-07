@@ -145,6 +145,7 @@ export default function Checklist() {
       <style>{globalCss}</style>
 
       <header style={styles.header}>
+        <a href="/" style={styles.backLink}>‹ Terug naar planner</a>
         <p style={styles.kicker}>Vogezen 2026 · Voorbereiding</p>
         <h1 style={styles.title}>Auto & documenten</h1>
         <p style={styles.sub}>
@@ -252,6 +253,11 @@ const styles = {
     backgroundSize: '22px 22px',
   },
   header: { marginBottom: 28 },
+  backLink: {
+    display: 'inline-block', marginBottom: 14, fontSize: 13, fontWeight: 600,
+    color: teal, textDecoration: 'none', padding: '6px 12px 6px 10px',
+    background: tealSoft, borderRadius: 99,
+  },
   kicker: {
     fontSize: 12, letterSpacing: '0.12em', textTransform: 'uppercase',
     color: teal, fontWeight: 600, margin: '0 0 6px',

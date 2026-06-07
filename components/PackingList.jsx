@@ -143,6 +143,7 @@ export default function PackingList() {
       <style>{globalCss}</style>
 
       <header style={S.header}>
+        <a href="/" style={S.backLink}>‹ Terug naar planner</a>
         <p style={S.kicker}>Vogezen 2026 · Inpakken</p>
         <h1 style={S.title}>Wat gaat er mee</h1>
         <p style={S.sub}>
@@ -289,6 +290,7 @@ const S = {
     backgroundSize: '22px 22px',
   },
   header: { marginBottom: 24 },
+  backLink: { display: 'inline-block', marginBottom: 14, fontSize: 13, fontWeight: 600, color: teal, textDecoration: 'none', padding: '6px 12px 6px 10px', background: tealSoft, borderRadius: 99 },
   kicker: { fontSize: 12, letterSpacing: '0.12em', textTransform: 'uppercase', color: teal, fontWeight: 600, margin: '0 0 6px' },
   title: { fontFamily: "'Fraunces', serif", fontSize: 34, fontWeight: 700, lineHeight: 1.05, margin: '0 0 8px' },
   sub: { fontSize: 15, lineHeight: 1.5, color: '#57534e', margin: '0 0 20px' },
