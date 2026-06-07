@@ -92,6 +92,18 @@ export default function PackingList() {
   };
 
   const removeCategory = (catId) => {
+    const cat = categories.find((c) => c.id === catId);
+    const count = items.filter((it) => it.categoryId === catId).length;
+    const naam = cat ? `“${cat.name}”` : 'deze categorie';
+    const itemTekst =
+      count === 0
+        ? 'Deze categorie is leeg.'
+        : count === 1
+          ? 'Hiermee verdwijnt ook 1 item.'
+          : `Hiermee verdwijnen ook ${count} items.`;
+    if (!window.confirm(`Categorie ${naam} verwijderen?\n\n${itemTekst}\n\nDit kan niet ongedaan worden gemaakt.`)) {
+      return;
+    }
     apply(
       categories.filter((c) => c.id !== catId),
       items.filter((it) => it.categoryId !== catId),
